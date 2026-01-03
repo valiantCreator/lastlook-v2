@@ -151,6 +151,6 @@ _The Rust Core._
 
 ### 🔮 Phase 4: Rust Backend (The Engine)
 
-- [ ] **Custom Commands:** Create `src-tauri/src/lib.rs` functions accessible from React.
-- [ ] **MD5 Hashing:** Multithreaded file verification (CPU-intensive task moved to Rust).
+- [x] **Custom Commands:** Create `src-tauri/src/lib.rs` functions accessible from React.
+- [x] **MD5 Hashing:** Multithreaded file verification (CPU-intensive task moved to Rust).
 - [ ] **Transfer Loop:** The actual copy process (with buffer control and progress updates).

@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core"; // <--- Ensure this is here too
 import { FileList } from "./components/FileList";
 import { useAppStore } from "./store/appStore";
 import { useFileSystem } from "./hooks/useFileSystem";
+import { useTransfer } from "./hooks/useTransfer";
 import "./App.css";
 
 function App() {
@@ -19,6 +20,9 @@ function App() {
 
   // 2. LOGIC (From Hook)
   const { selectSource, selectDest } = useFileSystem();
+
+  const { startTransfer, isTransferring, currentFile, progress } =
+    useTransfer();
 
   // TEST BRIDGE ON MOUNT
   useEffect(() => {
@@ -105,17 +109,38 @@ function App() {
             </div>
           )}
         </div>
-        <div className="h-16 border-t border-zinc-800 flex items-center justify-center bg-zinc-900/20">
-          <button
-            disabled={!sourcePath || !destPath}
-            className={`px-6 py-2 rounded-lg font-medium transition-all text-sm shadow-lg ${
-              !sourcePath || !destPath
-                ? "bg-zinc-800 text-zinc-600 cursor-not-allowed shadow-none"
-                : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-900/20 cursor-pointer hover:scale-105 active:scale-95"
-            }`}
-          >
-            Start Transfer
-          </button>
+        {/* Footer: Transfer Controls */}
+        <div className="h-20 border-t border-zinc-800 flex flex-col items-center justify-center bg-zinc-900/20 px-4">
+          {isTransferring ? (
+            <div className="w-full max-w-xs space-y-2">
+              <div className="flex justify-between text-[10px] text-zinc-400 font-mono uppercase">
+                <span className="truncate max-w-[150px]">{currentFile}</span>
+                <span>{progress}%</span>
+              </div>
+              {/* Progress Bar Track */}
+              <div className="h-2 w-full bg-zinc-800 rounded-full overflow-hidden">
+                {/* Progress Bar Fill */}
+                <div
+                  className="h-full bg-emerald-500 transition-all duration-100 ease-out"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={startTransfer}
+              disabled={!sourcePath || !destPath}
+              className={`px-6 py-2 rounded-lg font-medium transition-all text-sm shadow-lg
+         ${
+           !sourcePath || !destPath
+             ? "bg-zinc-800 text-zinc-600 cursor-not-allowed shadow-none"
+             : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-900/20 cursor-pointer hover:scale-105 active:scale-95"
+         }
+       `}
+            >
+              Start Transfer
+            </button>
+          )}
         </div>
       </div>
 
