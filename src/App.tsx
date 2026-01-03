@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useFileSystem } from "./hooks/useFileSystem";
 import { useAppStore } from "./store/appStore";
 import { FileList } from "./components/FileList";
+import { DestFileList } from "./components/DestFileList"; // <--- NEW COMPONENT
 import { Inspector } from "./components/Inspector";
 import { useTransfer } from "./hooks/useTransfer";
 
@@ -39,7 +40,7 @@ function App() {
     if (sourcePath) scanSource();
   }, [sourcePath]);
 
-  // NEW: Update "Green Dots" whenever Destination changes
+  // Update "Green Dots" whenever Destination changes
   useEffect(() => {
     if (destPath) scanDest(destPath);
   }, [destPath]);
@@ -97,7 +98,7 @@ function App() {
         </div>
 
         {/* Content */}
-        <div className="flex-1 p-4 flex flex-col">
+        <div className="flex-1 p-4 flex flex-col min-h-0">
           {!destPath ? (
             <div className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-zinc-800 rounded-xl hover:border-zinc-700 transition-colors bg-zinc-900/20">
               <button
@@ -108,16 +109,22 @@ function App() {
               </button>
             </div>
           ) : (
-            <div className="flex-1 border border-zinc-800 rounded-xl bg-zinc-900/30 p-4 relative group">
-              <div className="absolute top-4 left-4">
-                <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-1">
-                  Target Path
-                </p>
-                <p className="text-xs font-mono text-emerald-400 break-all">
+            <div className="flex-1 border border-zinc-800 rounded-xl bg-zinc-900/30 relative flex flex-col overflow-hidden">
+              {/* Small Info Header */}
+              <div className="h-8 border-b border-zinc-800/50 bg-zinc-900/50 flex items-center px-3 shrink-0">
+                <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider mr-2">
+                  Target:
+                </span>
+                <span
+                  className="text-[10px] font-mono text-emerald-400 truncate"
+                  title={destPath}
+                >
                   {destPath}
-                </p>
+                </span>
               </div>
-              {/* Note: Unmount button moved to Header for better visibility */}
+
+              {/* THE NEW SYNCED LIST */}
+              <DestFileList files={destFiles} />
             </div>
           )}
         </div>
@@ -168,8 +175,6 @@ function App() {
             INSPECTOR
           </span>
         </div>
-
-        {/* The New Brain */}
         <Inspector />
       </div>
     </div>
