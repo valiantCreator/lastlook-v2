@@ -1,79 +1,21 @@
-import { useEffect } from "react";
-import { open } from "@tauri-apps/plugin-dialog";
-import { readDir } from "@tauri-apps/plugin-fs";
 import { FileList } from "./components/FileList";
-import { useAppStore } from "./store/appStore"; // <--- IMPORT STORE
+import { useAppStore } from "./store/appStore";
+import { useFileSystem } from "./hooks/useFileSystem";
 import "./App.css";
 
 function App() {
-  // GLOBAL STATE (No more useState!)
+  // 1. DATA (From Store)
   const {
     sourcePath,
     destPath,
     fileList,
     destFiles,
-    setSourcePath,
     setDestPath,
-    setFileList,
-    setDestFiles,
     resetSource,
   } = useAppStore();
 
-  // 1. SELECT SOURCE
-  async function handleSelectSource() {
-    try {
-      const selected = await open({
-        directory: true,
-        multiple: false,
-        title: "Select Source Media",
-      });
-      if (selected) {
-        const path = selected as string;
-        setSourcePath(path);
-
-        // Scan immediately
-        const entries = await readDir(path);
-        const visible = entries.filter((file) => !file.name.startsWith("."));
-        setFileList(visible);
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  }
-
-  // 2. SELECT DESTINATION
-  async function handleSelectDest() {
-    try {
-      const selected = await open({
-        directory: true,
-        multiple: false,
-        title: "Select Backup Destination",
-      });
-      if (selected) {
-        setDestPath(selected as string);
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  }
-
-  // EFFECT: Monitor Destination
-  useEffect(() => {
-    async function scanDest() {
-      if (!destPath) {
-        setDestFiles(new Set());
-        return;
-      }
-      try {
-        const entries = await readDir(destPath);
-        const fileSet = new Set(entries.map((e) => e.name));
-        setDestFiles(fileSet);
-      } catch (err) {
-        console.error("Failed to read dest:", err);
-      }
-    }
-    scanDest();
-  }, [destPath, setDestFiles]);
+  // 2. LOGIC (From Hook)
+  const { selectSource, selectDest } = useFileSystem();
 
   return (
     <div className="h-screen w-screen bg-zinc-950 text-zinc-300 flex overflow-hidden font-sans select-none">
@@ -87,13 +29,12 @@ function App() {
             {sourcePath}
           </span>
         </div>
-
         <div className="flex-1 flex flex-col bg-zinc-900/20 overflow-hidden relative">
           <FileList
             sourcePath={sourcePath}
             files={fileList}
             destFiles={destFiles}
-            onSelectSource={handleSelectSource}
+            onSelectSource={selectSource} // <--- Clean!
             onClearSource={resetSource}
           />
         </div>
@@ -119,7 +60,7 @@ function App() {
           {!destPath ? (
             <div className="text-center">
               <button
-                onClick={handleSelectDest}
+                onClick={selectDest}
                 className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-4 py-2 rounded-md text-sm border border-zinc-700 transition-all cursor-pointer shadow-lg"
               >
                 + Select Destination
