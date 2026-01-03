@@ -1,27 +1,26 @@
 use tauri::{AppHandle, Emitter}; 
 use std::fs::File;
 use std::io::{Read, Write};
-use md5::Context; 
+use xxhash_rust::xxh3::Xxh3;
+use std::time::Instant; // <--- NEW: Stopwatch
 
-// COMMAND 1: Calculate Hash (Heap Safe 🛡️)
+// COMMAND 1: Calculate Hash (xxHash)
 #[tauri::command]
 async fn calculate_hash(path: String) -> Result<String, String> {
-    println!("🦀 Hashing: {}", path);
+    // println!("🦀 Hashing: {}", path); // Commented out to reduce noise
     let mut file = File::open(&path).map_err(|e| e.to_string())?;
-    let mut context = Context::new();
-    
-    // FIX: Use vec! to allocate on Heap instead of Stack
-    let mut buffer = vec![0; 1024 * 1024]; 
+    let mut hasher = Xxh3::new();
+    let mut buffer = vec![0; 64 * 1024 * 1024]; 
 
     loop {
         let bytes = file.read(&mut buffer).map_err(|e| e.to_string())?;
         if bytes == 0 { break; }
-        context.consume(&buffer[..bytes]);
+        hasher.update(&buffer[..bytes]);
     }
-    Ok(format!("{:x}", context.compute()))
+    Ok(format!("{:x}", hasher.digest()))
 }
 
-// COMMAND 2: The Transfer Engine (Verified & Heap Safe 🛡️)
+// COMMAND 2: The Transfer Engine (Instrumented ⏱️)
 #[tauri::command]
 async fn copy_file(app: AppHandle, source: String, dest: String) -> Result<String, String> {
     // 1. Setup
@@ -37,23 +36,20 @@ async fn copy_file(app: AppHandle, source: String, dest: String) -> Result<Strin
     
     // Create Destination File
     let mut dst_file = File::create(&dest).map_err(|e| format!("Create failed: {}", e))?;
+    
+    // --- PHASE 1: COPY & HASH ---
+    println!("🚀 STARTING TRANSFER: {} ({:.2} MB)", filename, total_size as f64 / 1_048_576.0);
+    let start_transfer = Instant::now();
 
-    // 2. Initialize Source Hasher
-    let mut src_context = Context::new();
-
-    // 3. The Pipelined Loop (Read -> Hash -> Write)
-    // FIX: Use vec! to allocate 1MB on the Heap
-    let mut buffer = vec![0; 1024 * 1024]; 
+    let mut src_hasher = Xxh3::new();
+    let mut buffer = vec![0; 64 * 1024 * 1024]; 
     let mut transferred: u64 = 0;
 
     loop {
         let bytes_read = src_file.read(&mut buffer).map_err(|e| e.to_string())?;
         if bytes_read == 0 { break; }
 
-        // A. Hash the chunk
-        src_context.consume(&buffer[..bytes_read]);
-
-        // B. Write the chunk
+        src_hasher.update(&buffer[..bytes_read]);
         dst_file.write_all(&buffer[..bytes_read]).map_err(|e| e.to_string())?;
         
         transferred += bytes_read as u64;
@@ -66,29 +62,50 @@ async fn copy_file(app: AppHandle, source: String, dest: String) -> Result<Strin
         }).map_err(|e| e.to_string())?;
     }
 
-    // 4. Calculate Final Source Hash
-    let src_hash = format!("{:x}", src_context.compute());
-    println!("🦀 Source Hash Calculated: {}", src_hash);
+    let duration_transfer = start_transfer.elapsed();
+    let src_hash = format!("{:x}", src_hasher.digest());
+    
+    // Calculate Speed
+    let mb_per_sec_transfer = (total_size as f64 / 1_048_576.0) / duration_transfer.as_secs_f64();
+    println!("✅ COPY DONE: {:.2}s ({:.2} MB/s)", duration_transfer.as_secs_f64(), mb_per_sec_transfer);
 
-    // 5. Verification: Read Destination Back
+    // NEW: Emit "Verifying" state to UI so the Dot turns Yellow immediately
+    app.emit("transfer-verifying", VerifyingPayload {
+        filename: filename.clone(),
+    }).map_err(|e| e.to_string())?;
+
+    // --- PHASE 2: VERIFICATION (READ BACK) ---
+    println!("🛡️ STARTING VERIFICATION...");
+    let start_verify = Instant::now();
+
+    // We call the helper function, which reads the file from disk again
     let dst_hash = calculate_hash(dest).await?;
 
-    // 6. Compare
+    let duration_verify = start_verify.elapsed();
+    let mb_per_sec_verify = (total_size as f64 / 1_048_576.0) / duration_verify.as_secs_f64();
+    println!("✅ VERIFY DONE: {:.2}s ({:.2} MB/s)", duration_verify.as_secs_f64(), mb_per_sec_verify);
+
+    // --- REPORT ---
     if src_hash == dst_hash {
-        println!("✅ Verified Match: {}", filename);
+        println!("🎉 TOTAL TIME: {:.2}s", duration_transfer.as_secs_f64() + duration_verify.as_secs_f64());
         Ok(src_hash)
     } else {
-        println!("❌ HASH MISMATCH: {} vs {}", src_hash, dst_hash);
+        println!("❌ HASH MISMATCH");
         Err(format!("Verification Failed for {}", filename))
     }
 }
 
-// DATA STRUCTURE
+// DATA STRUCTURES
 #[derive(Clone, serde::Serialize)]
 struct ProgressPayload {
     filename: String,
     total: u64,
     transferred: u64,
+}
+
+#[derive(Clone, serde::Serialize)]
+struct VerifyingPayload {
+    filename: String,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

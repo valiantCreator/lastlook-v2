@@ -9,16 +9,21 @@ interface ProgressEvent {
   transferred: number;
 }
 
+interface VerifyingEvent {
+  filename: string;
+}
+
 export function useTransfer() {
   // 1. GET THE STORE DATA
   const {
     fileList,
     sourcePath,
     destPath,
-    destFiles,
     setDestFiles,
     addVerifiedFile,
-    checkedFiles, // <--- Crucial: Needed for the filter logic below
+    addVerifyingFile, // <--- NEW ACTION
+    removeVerifyingFile, // <--- NEW ACTION
+    checkedFiles,
   } = useAppStore();
 
   const [isTransferring, setIsTransferring] = useState(false);
@@ -37,7 +42,8 @@ export function useTransfer() {
     setIsTransferring(true);
     setProgress(0);
 
-    const unlisten = await listen<ProgressEvent>(
+    // 1. LISTEN FOR PROGRESS (Update Bar)
+    const unlistenProgress = await listen<ProgressEvent>(
       "transfer-progress",
       (event) => {
         const { transferred, total, filename } = event.payload;
@@ -48,8 +54,18 @@ export function useTransfer() {
       }
     );
 
+    // 2. LISTEN FOR VERIFYING (Turn Dot Yellow)
+    const unlistenVerifying = await listen<VerifyingEvent>(
+      "transfer-verifying",
+      (event) => {
+        const { filename } = event.payload;
+        // This turns the dot Yellow instantly while Rust keeps working
+        addVerifyingFile(filename);
+        setCurrentFile(`${filename} (Verifying...)`);
+      }
+    );
+
     try {
-      // FILTER: Only process files that are in the 'checkedFiles' Set
       const filesToTransfer = fileList.filter((f) => checkedFiles.has(f.name));
 
       for (const file of filesToTransfer) {
@@ -64,25 +80,35 @@ export function useTransfer() {
         const fullSource = `${sourcePath}${srcSeparator}${file.name}`;
         const fullDest = `${destPath}${destSeparator}${file.name}`;
 
-        // RUN TRANSFER
+        // RUN TRANSFER (Rust will emit 'transfer-verifying' halfway through)
         await invoke("copy_file", { source: fullSource, dest: fullDest });
 
-        // UPDATE STATE
-        // 1. Mark as Present (Green Dot)
+        // TRANSFER COMPLETE
+        // 1. Remove "Verifying" status (Yellow off)
+        removeVerifyingFile(file.name);
+
+        // 2. Mark as Present (Green Dot)
         const currentDestFiles = new Set(useAppStore.getState().destFiles);
         currentDestFiles.add(file.name);
         setDestFiles(currentDestFiles);
 
-        // 2. Mark as Verified (Shield Icon)
+        // 3. Mark as Verified (Shield Icon)
         addVerifiedFile(file.name);
       }
 
       console.log("Batch Transfer Complete!");
     } catch (err) {
       console.error("Transfer Error:", err);
-      // In a real app, we would show a toast notification here
+      // Safety: If error, remove verifying status so it doesn't get stuck on Yellow
+      // We can iterate checked files to be safe, or just clear the specific one if we tracked it
+      useAppStore
+        .getState()
+        .fileList.forEach((f) => removeVerifyingFile(f.name));
     } finally {
-      unlisten();
+      // Clean up listeners
+      unlistenProgress();
+      unlistenVerifying();
+
       setIsTransferring(false);
       setProgress(100);
       setTimeout(() => {

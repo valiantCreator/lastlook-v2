@@ -4,7 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useFileSystem } from "./hooks/useFileSystem";
 import { useAppStore } from "./store/appStore";
 import { FileList } from "./components/FileList";
-import { DestFileList } from "./components/DestFileList"; // <--- NEW COMPONENT
+import { DestFileList } from "./components/DestFileList";
 import { Inspector } from "./components/Inspector";
 import { useTransfer } from "./hooks/useTransfer";
 
@@ -17,6 +17,7 @@ function App() {
     destFiles,
     resetSource,
     checkedFiles,
+    verifyingFiles,
   } = useAppStore();
 
   const {
@@ -44,6 +45,9 @@ function App() {
   useEffect(() => {
     if (destPath) scanDest(destPath);
   }, [destPath]);
+
+  // DERIVED STATE FOR FOOTER UI
+  const isVerifying = verifyingFiles.size > 0;
 
   return (
     <div className="h-screen w-screen bg-zinc-950 text-zinc-300 flex overflow-hidden font-sans select-none">
@@ -133,15 +137,33 @@ function App() {
         <div className="h-20 border-t border-zinc-800 flex flex-col items-center justify-center bg-zinc-900/20 px-4 shrink-0">
           {isTransferring ? (
             <div className="w-full max-w-xs space-y-2">
-              <div className="flex justify-between text-[10px] text-zinc-400 font-mono uppercase">
-                <span className="truncate max-w-[150px]">{currentFile}</span>
-                <span>{progress}%</span>
+              <div className="flex justify-between text-[10px] font-mono uppercase">
+                <span
+                  className={`truncate max-w-[150px] ${
+                    isVerifying ? "text-yellow-400 font-bold" : "text-zinc-400"
+                  }`}
+                >
+                  {currentFile}
+                </span>
+                <span
+                  className={isVerifying ? "text-yellow-400" : "text-zinc-400"}
+                >
+                  {progress}%
+                </span>
               </div>
-              {/* Progress Bar Track */}
-              <div className="h-2 w-full bg-zinc-800 rounded-full overflow-hidden">
-                {/* Progress Bar Fill */}
+
+              {/* PROGRESS BAR TRACK */}
+              <div className="h-2 w-full bg-zinc-800 rounded-full overflow-hidden relative">
+                {/* PROGRESS BAR FILL */}
                 <div
-                  className="h-full bg-emerald-500 transition-all duration-100 ease-out"
+                  className={`
+                       h-full transition-all duration-300 ease-out
+                       ${
+                         isVerifying
+                           ? "bg-yellow-500 progress-stripe" // <--- AMBER MODE
+                           : "bg-emerald-500" // <--- NORMAL MODE
+                       }
+                     `}
                   style={{ width: `${progress}%` }}
                 />
               </div>

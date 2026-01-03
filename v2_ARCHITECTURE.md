@@ -1,8 +1,8 @@
 # LastLook v2.0: Architecture & Technical Specs
 
-**Status:** Alpha (Inspector Functional)
+**Status:** Beta (Batch & Sync Logic Active)
 **Stack:** Tauri (Rust) + React (TypeScript) + Tailwind CSS + Zustand
-**Date:** January 2, 2026
+**Date:** January 3, 2026
 
 ---
 
@@ -49,7 +49,7 @@ _The React Frontend logic._
   - **Dependencies:** `react-dom/client`, `App.tsx`
 - **`App.tsx`**
   - **Purpose:** The main layout container (Source/Dest/Inspector Grid). It composes the UI but contains **no logic**.
-  - **Dependencies:** `FileList.tsx`, `Inspector.tsx`, `useFileSystem`, `appStore`
+  - **Dependencies:** `FileList.tsx`, `DestFileList.tsx`, `Inspector.tsx`, `useFileSystem`, `appStore`
 - **`App.css`**
   - **Purpose:** Entry point for Tailwind directives (`@import "tailwindcss"`).
   - **Dependencies:** Tailwind
@@ -59,13 +59,16 @@ _The React Frontend logic._
 _Pure UI elements (Presentation Layer)._
 
 - **`FileList.tsx`**
-  - **Purpose:** Renders the scrollable list of files OR the "Select Source" empty state.
+  - **Purpose:** Renders the scrollable list of source files OR the "Select Source" empty state.
   - **Dependencies:** `FileRow.tsx`, `DirEntry` (type), `appStore`
+- **`DestFileList.tsx`**
+  - **Purpose:** Renders the destination file list. Supports auto-scrolling and synced highlighting.
+  - **Dependencies:** `appStore`
 - **`FileRow.tsx`**
-  - **Purpose:** Renders a single file row. Contains the "Traffic Light" logic (Green/Red dot) and click handlers.
+  - **Purpose:** Renders a single file row. Contains the "Traffic Light" logic (Green/Red dot), Checkboxes, and click handlers.
   - **Dependencies:** `DirEntry` (type)
 - **`Inspector.tsx`**
-  - **Purpose:** Displays metadata (Size, Date, Preview) for the currently selected file. Handles `fs.stat` calls and error reporting.
+  - **Purpose:** Displays metadata (Size, Date, Preview) for the currently selected file. Handles `fs.stat` calls and batch size calculations.
   - **Dependencies:** `appStore`, `@tauri-apps/plugin-fs`
 
 #### Hooks (`src/hooks/`)
@@ -73,15 +76,18 @@ _Pure UI elements (Presentation Layer)._
 _Reusable Logic Layer._
 
 - **`useFileSystem.ts`**
-  - **Purpose:** The Bridge between React and Tauri. Handles opening dialogs and scanning folders.
+  - **Purpose:** The Bridge between React and Tauri. Handles opening dialogs, scanning folders, and mounting destinations.
   - **Dependencies:** `@tauri-apps/plugin-dialog`, `@tauri-apps/plugin-fs`, `appStore`
+- **`useTransfer.ts`**
+  - **Purpose:** The Controller. Manages the transfer loop, listens for Rust events (`transfer-progress`), and enforces batch selection rules.
+  - **Dependencies:** `appStore`, `@tauri-apps/api/core`
 
 #### Store (`src/store/`)
 
 _Global State Management._
 
 - **`appStore.ts`**
-  - **Purpose:** The Single Source of Truth. Holds `sourcePath`, `destPath`, `fileList`, and `selectedFile`.
+  - **Purpose:** The Single Source of Truth. Holds `sourcePath`, `destPath`, `fileList`, `destFiles`, `verifiedFiles`, `checkedFiles` (Batch), and `selectedFile`.
   - **Dependencies:** `zustand`
 
 ### 2.3 Backend (`src-tauri/`)
@@ -99,7 +105,9 @@ _The Rust Core._
 - **`src/main.rs`**
   - **Purpose:** The Rust entry point. Spins up the WebView.
 - **`src/lib.rs`**
-  - **Purpose:** Registers plugins (`tauri-plugin-fs`, `tauri-plugin-dialog`).
+  - **Purpose:** The Engine. Contains:
+    - `calculate_hash`: Independent MD5 check.
+    - `copy_file`: Pipelined Transfer + Verification loop (Read -> Hash -> Write -> Read -> Verify).
 
 ---
 
@@ -111,7 +119,7 @@ _The Rust Core._
 4.  **Backend:** Rust opens Windows native picker.
 5.  **State:** Path is saved to `appStore`.
 6.  **Reaction:** `FileList` component re-renders because it subscribes to `appStore`.
-7.  **Interaction:** User clicks a file -> `selectedFile` updates -> `Inspector` fetches metadata via `fs.stat`.
+7.  **Interaction:** User checks a box -> `checkedFiles` Set updates -> `Inspector` calculates total batch size via `fs.stat`.
 
 ---
 
@@ -156,37 +164,39 @@ _The Rust Core._
 - [x] **Transfer Loop:** The copy process with progress events.
 - [x] **Real-Time UI:** `useTransfer` hook updates the Traffic Lights instantly.
 
-### 🔮 Phase 5: Verification & Polish (The Final Layer)
+### ✅ Phase 5: Verification & Polish (Completed)
 
 - [x] **xxHash/MD5 Integration:** Hashing occurs _during_ the transfer stream.
 - [x] **Verification Logic:** Compare Source Hash vs. Dest Hash.
 - [x] **UI Cleanup:** Remove debug buttons.
 - [x] **Verified Badge:** Show a Shield icon for confirmed transfers.
 
-### 🚧 Phase 6: The Batch Commander (Current Focus)
+### ✅ Phase 6: The Batch Commander (Completed)
 
 _Goal: Restore v1 Parity for Selection & Stats._
 
-- [ ] **Checkbox System:** Add multi-select checkboxes to `FileRow`.
-- [ ] **Batch Store:** Update `appStore` to track a Set of `selectedFileIds`.
-- [ ] **Smart Select:** "Select All Missing" button.
-- [ ] **Batch Stats:** Calculate "Total Size" of selected files in Inspector.
-- [ ] **Synced Highlight:** Clicking a file highlights it in both Source & Dest lists.
-- [ ] **Cleanup:** Remove the debug "Generate Hash" button.
+- [x] **Checkbox System:** Add multi-select checkboxes to `FileRow`.
+- [x] **Batch Store:** Update `appStore` to track a Set of `selectedFileIds`.
+- [x] **Smart Select:** "Select All Missing" button.
+- [x] **Batch Stats:** Calculate "Total Size" of selected files in Inspector.
+- [x] **Synced Highlight:** Clicking a file highlights it in both Source & Dest lists.
+- [x] **Cleanup:** Remove the debug "Generate Hash" button.
 
 ### 🔮 Phase 7: The Controller
 
-_Goal: Advanced Flow Control._
+_Goal: Performance Optimization & Flow Control._
 
-- [ ] **Cancel/Pause Logic:** Rust `Receiver` channel to interrupt the loop.
-- [ ] **Job Modal:** Persistent progress bar (bottom of screen) independent of selection.
-- [ ] **Overwrite Protection:** Prompt user before stomping existing files.
+- [ ] **I/O Optimization:** Increase buffer size (1MB -> 64MB) to maximize disk throughput.
+- [ ] **Async Verification:** Decouple the final MD5 check from the UI thread so the app remains responsive during validation.
+- [ ] **Cancel/Pause Logic:** Implement a Rust `Receiver` channel (using `tokio::sync::mpsc` or `std::sync::mpsc`) to interrupt the loop when the user clicks Stop.
+- [ ] **Job Modal:** A persistent status bar (or modal) that displays progress even if the user navigates away or changes selection.
+- [ ] **Overwrite Protection:** Add a pre-flight check to warn the user before overwriting existing files in the Destination.
 
 ### 🔮 Phase 8: The Visualizer
 
 _Goal: Media features powered by FFmpeg._
 
-- [ ] **Sidecar Binary:** Bundle `ffmpeg.exe` with the app.
-- [ ] **Thumbnailer:** Generate 00:01 frame previews in the Inspector.
-- [ ] **Metadata:** Use `ffprobe` for Resolution/Codec info.
-- [ ] **Comparators:** Side-by-side view of Source vs. Dest.
+- [ ] **Sidecar Binary Integration:** Bundle `ffmpeg.exe` and `ffprobe.exe` with the Tauri installer.
+- [ ] **Thumbnail Generator:** Create a background command to extract a frame at 00:01 and cache it for the Inspector.
+- [ ] **Advanced Metadata:** Use `ffprobe` to extract Resolution, Codec, Bitrate, and Frame Rate info.
+- [ ] **Comparators:** A "Compare Mode" that places the Source and Destination files side-by-side visually to verify quality manually.

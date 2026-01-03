@@ -21,6 +21,7 @@ export function FileList({
     selectedFile,
     setSelectedFile,
     verifiedFiles,
+    verifyingFiles, // <--- GRAB THIS FROM STORE
     checkedFiles,
     toggleChecked,
     checkAllMissing,
@@ -66,6 +67,7 @@ export function FileList({
             file={file}
             isSynced={destFiles.has(file.name)}
             isVerified={verifiedFiles.has(file.name)}
+            isVerifying={verifyingFiles.has(file.name)} // <--- PASS IT DOWN
             isSelected={selectedFile?.name === file.name}
             isChecked={checkedFiles.has(file.name)}
             onSelect={() => setSelectedFile(file)}

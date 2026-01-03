@@ -6,17 +6,20 @@ interface AppState {
   sourcePath: string | null;
   destPath: string | null;
   fileList: DirEntry[];
-  destFiles: Set<string>; // Files that exist in Destination
-  verifiedFiles: Set<string>; // Files that are MD5 Verified
-
-  selectedFile: DirEntry | null; // Single file shown in Inspector
-  checkedFiles: Set<string>; // Multiple files marked for Transfer
+  destFiles: Set<string>;
+  verifiedFiles: Set<string>;
+  verifyingFiles: Set<string>; // <--- NEW: Track files currently verifying
+  selectedFile: DirEntry | null;
+  checkedFiles: Set<string>;
 
   // ACTIONS
   setSourcePath: (path: string | null) => void;
   setDestPath: (path: string | null) => void;
   setFileList: (files: DirEntry[]) => void;
   setDestFiles: (files: Set<string>) => void;
+
+  addVerifyingFile: (filename: string) => void; // <--- NEW
+  removeVerifyingFile: (filename: string) => void; // <--- NEW
   addVerifiedFile: (filename: string) => void;
 
   setSelectedFile: (file: DirEntry | null) => void;
@@ -26,7 +29,6 @@ interface AppState {
   checkAllMissing: () => void;
   setAllChecked: (filenames: string[]) => void;
   clearChecked: () => void;
-
   resetSource: () => void;
 }
 
@@ -36,6 +38,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   fileList: [],
   destFiles: new Set(),
   verifiedFiles: new Set(),
+  verifyingFiles: new Set(), // <--- NEW
   selectedFile: null,
   checkedFiles: new Set(),
 
@@ -45,7 +48,21 @@ export const useAppStore = create<AppState>((set, get) => ({
   setFileList: (files) => set({ fileList: files }),
   setDestFiles: (files) => set({ destFiles: files }),
 
-  // Add a single file to the verified list
+  // NEW ACTIONS
+  addVerifyingFile: (filename) =>
+    set((state) => {
+      const newSet = new Set(state.verifyingFiles);
+      newSet.add(filename);
+      return { verifyingFiles: newSet };
+    }),
+
+  removeVerifyingFile: (filename) =>
+    set((state) => {
+      const newSet = new Set(state.verifyingFiles);
+      newSet.delete(filename);
+      return { verifyingFiles: newSet };
+    }),
+
   addVerifiedFile: (filename) =>
     set((state) => {
       const newSet = new Set(state.verifiedFiles);
@@ -55,16 +72,13 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setSelectedFile: (file) => set({ selectedFile: file }),
 
-  // --- NEW BATCH LOGIC ---
+  // --- BATCH LOGIC ---
 
   toggleChecked: (filename) =>
     set((state) => {
       const newSet = new Set(state.checkedFiles);
-      if (newSet.has(filename)) {
-        newSet.delete(filename);
-      } else {
-        newSet.add(filename);
-      }
+      if (newSet.has(filename)) newSet.delete(filename);
+      else newSet.add(filename);
       return { checkedFiles: newSet };
     }),
 
@@ -78,7 +92,6 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   setAllChecked: (filenames) => set({ checkedFiles: new Set(filenames) }),
-
   clearChecked: () => set({ checkedFiles: new Set() }),
 
   resetSource: () =>
@@ -87,6 +100,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       fileList: [],
       selectedFile: null,
       verifiedFiles: new Set(),
+      verifyingFiles: new Set(),
       checkedFiles: new Set(),
     }),
 }));

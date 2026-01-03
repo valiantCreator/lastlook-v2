@@ -4,38 +4,47 @@ interface FileRowProps {
   file: DirEntry;
   isSynced: boolean;
   isVerified: boolean;
-  isSelected: boolean; // Active in Inspector
-  isChecked: boolean; // Checked for Transfer
-  onSelect: () => void; // Click Row
-  onCheck: () => void; // Click Checkbox
+  isVerifying: boolean;
+  isSelected: boolean;
+  isChecked: boolean;
+  onSelect: () => void;
+  onCheck: () => void;
 }
 
 export function FileRow({
   file,
   isSynced,
   isVerified,
+  isVerifying,
   isSelected,
   isChecked,
   onSelect,
   onCheck,
 }: FileRowProps) {
+  // DYNAMIC ROW STYLING
+  let rowStyle = "border-transparent hover:bg-zinc-800/50"; // Default
+
+  if (isSelected) {
+    rowStyle = "bg-zinc-800 border-zinc-700 shadow-md";
+  } else if (isVerifying) {
+    // THE GOLDEN ROW
+    rowStyle =
+      "bg-yellow-500/10 border-yellow-500/20 shadow-[inset_0_0_10px_rgba(234,179,8,0.05)]";
+  }
+
   return (
     <div
       onClick={onSelect}
       className={`
-        flex items-center gap-3 p-2 rounded cursor-pointer group transition-all duration-200 border select-none
-        ${
-          isSelected
-            ? "bg-zinc-800 border-zinc-700 shadow-md"
-            : "border-transparent hover:bg-zinc-800/50"
-        }
+        flex items-center gap-3 p-2 rounded cursor-pointer group transition-all duration-300 border select-none
+        ${rowStyle}
       `}
     >
-      {/* CHECKBOX (Only for files, not folders yet) */}
+      {/* CHECKBOX */}
       {!file.isDirectory ? (
         <div
           onClick={(e) => {
-            e.stopPropagation(); // Don't trigger Inspector when checking
+            e.stopPropagation();
             onCheck();
           }}
           className={`
@@ -64,14 +73,16 @@ export function FileRow({
           )}
         </div>
       ) : (
-        <div className="w-4 h-4" /> // Spacer for folders
+        <div className="w-4 h-4" />
       )}
 
       {/* TRAFFIC LIGHT DOT */}
       <div
         className={`w-2 h-2 rounded-full shadow-[0_0_8px_rgba(0,0,0,0.5)] transition-all duration-300
           ${
-            file.isDirectory
+            isVerifying
+              ? "bg-yellow-400 shadow-yellow-500/50 animate-pulse"
+              : file.isDirectory
               ? "bg-blue-500 shadow-blue-900/50"
               : isSynced
               ? "bg-emerald-500 shadow-emerald-500/50"
@@ -89,6 +100,8 @@ export function FileRow({
               ${
                 isSelected
                   ? "text-white"
+                  : isVerifying
+                  ? "text-yellow-100"
                   : isSynced
                   ? "text-emerald-100"
                   : "text-zinc-300"
@@ -98,7 +111,7 @@ export function FileRow({
             {file.name}
           </p>
 
-          {/* VERIFIED SHIELD ICON 🛡️ */}
+          {/* SHIELD ICON */}
           {isVerified && (
             <svg
               className="w-3 h-3 text-emerald-400 animate-in zoom-in duration-300"
@@ -116,12 +129,20 @@ export function FileRow({
 
         {/* Status Text */}
         <p
-          className={`text-[10px] truncate transition-colors ${
-            isSynced ? "text-emerald-500/70" : "text-zinc-600"
-          }`}
+          className={`text-[10px] truncate transition-colors 
+           ${
+             isVerifying
+               ? "text-yellow-400/80"
+               : isSynced
+               ? "text-emerald-500/70"
+               : "text-zinc-600"
+           }
+        `}
         >
           {file.isDirectory
             ? "Folder"
+            : isVerifying
+            ? "Verifying Integrity..."
             : isVerified
             ? "Verified MD5 Match"
             : isSynced
