@@ -1,3 +1,4 @@
+import { Inspector } from "./components/Inspector";
 import { FileList } from "./components/FileList";
 import { useAppStore } from "./store/appStore";
 import { useFileSystem } from "./hooks/useFileSystem";
@@ -107,11 +108,9 @@ function App() {
             INSPECTOR
           </span>
         </div>
-        <div className="flex-1 p-4 flex flex-col gap-4">
-          <div className="w-full aspect-video bg-zinc-800 rounded-lg flex items-center justify-center border border-zinc-700/50">
-            <span className="text-xs text-zinc-500">No Selection</span>
-          </div>
-        </div>
+
+        {/* The New Brain */}
+        <Inspector />
       </div>
     </div>
   );

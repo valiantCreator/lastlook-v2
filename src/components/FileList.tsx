@@ -1,4 +1,5 @@
 import { DirEntry } from "@tauri-apps/plugin-fs";
+import { useAppStore } from "../store/appStore"; // <--- Import Store
 import { FileRow } from "./FileRow";
 
 interface FileListProps {
@@ -16,7 +17,8 @@ export function FileList({
   onSelectSource,
   onClearSource,
 }: FileListProps) {
-  // 1. EMPTY STATE (No Source Selected)
+  const { selectedFile, setSelectedFile } = useAppStore(); // <--- Get Selection State
+
   if (!sourcePath) {
     return (
       <div className="absolute inset-0 flex flex-col items-center justify-center">
@@ -54,6 +56,8 @@ export function FileList({
           key={file.name}
           file={file}
           isSynced={destFiles.has(file.name)}
+          isSelected={selectedFile?.name === file.name} // <--- Check Match
+          onSelect={() => setSelectedFile(file)} // <--- Set State
         />
       ))}
 
