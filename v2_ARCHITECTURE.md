@@ -1,7 +1,7 @@
 # LastLook v2.0: Architecture & Technical Specs
 
-**Status:** Prototype (Traffic Light Logic Working)
-**Stack:** Tauri (Rust) + React (TypeScript) + Tailwind CSS
+**Status:** Alpha (Skeleton & Refactor Complete)
+**Stack:** Tauri (Rust) + React (TypeScript) + Tailwind CSS + Zustand
 **Date:** January 2, 2026
 
 ---
@@ -10,64 +10,100 @@
 
 LastLook v2 uses a **Hybrid Architecture**:
 
-1.  **Frontend (The Face):** A React Single Page Application (SPA) running in a system WebView. It handles all UI, State, and Animations.
-2.  **Backend (The Muscle):** A Rust binary that acts as the "Sidecar." It handles heavy I/O, File System access, and Shell commands (FFmpeg).
-3.  **The Bridge:** Tauri's IPC (Inter-Process Communication) allows React to call Rust functions asynchronously.
+1.  **Frontend (The Face):** A React Single Page Application (SPA).
+2.  **Backend (The Muscle):** A Rust binary acting as the "Sidecar" for File I/O.
+3.  **State (The Brain):** A Global Zustand Store (`appStore`) that creates a Single Source of Truth.
 
 ### The Stack
 
 - **Language:** TypeScript (Frontend) / Rust (Backend)
-- **Build Tool:** Vite (Fast HMR)
-- **Styling:** Tailwind CSS v4.0 (Utility-first)
-- **State Management:** React State (Migration to Zustand planned)
+- **Build Tool:** Vite
+- **Styling:** Tailwind CSS v4.0
+- **State:** Zustand
 
 ---
 
-## 2. Current Implementation (The "God Component")
+## 2. Directory Structure & File Glossary
 
-_As of Commit "Traffic Light Logic Working"_
+### 2.1 Root Configuration
 
-Currently, all logic resides in `src/App.tsx`.
+_Files that control the build environment._
 
-- **Imports:** `@tauri-apps/plugin-fs` (Reading Disk), `@tauri-apps/plugin-dialog` (Native Picker).
-- **State:**
-  - `sourcePath`: String (Selected Folder Path)
-  - `destPath`: String (Backup Destination Path)
-  - `fileList`: Array of `DirEntry` (Files in Source)
-  - `destFiles`: Set<String> (Files in Dest - optimized for O(1) lookup)
-- **Logic:**
-  - `useEffect` triggers a scan of Destination whenever `destPath` changes.
-  - **Traffic Light:** Iterates through `fileList` and checks `destFiles.has(name)` to determine Green/Red status.
+| File                     | Purpose                                                                 | Dependencies           |
+| :----------------------- | :---------------------------------------------------------------------- | :--------------------- |
+| **`package.json`**       | Defines project scripts (`dev`, `build`) and installed libraries.       | Node.js                |
+| **`vite.config.ts`**     | Configures the Vite build server. Handles Hot Module Replacement (HMR). | `vite`, `tauri`        |
+| **`tsconfig.json`**      | Rules for the TypeScript compiler (strict mode, target version).        | TypeScript             |
+| **`tailwind.config.js`** | Configures Tailwind's theme and content scanner.                        | Tailwind CSS           |
+| **`postcss.config.js`**  | Configures the CSS post-processor (required for Tailwind v4).           | `@tailwindcss/postcss` |
+| **`index.html`**         | The HTML entry point that loads the React JavaScript bundle.            | -                      |
+
+### 2.2 Source Code (`src/`)
+
+_The React Frontend logic._
+
+#### Entry & Layout
+
+- **`main.tsx`**
+  - **Purpose:** Bootstraps React and mounts it to the DOM.
+  - **Dependencies:** `react-dom/client`, `App.tsx`
+- **`App.tsx`**
+  - **Purpose:** The main layout container (Source/Dest/Inspector Grid). It composes the UI but contains **no logic**.
+  - **Dependencies:** `FileList.tsx`, `useFileSystem`, `appStore`
+- **`App.css`**
+  - **Purpose:** Entry point for Tailwind directives (`@import "tailwindcss"`).
+  - **Dependencies:** Tailwind
+
+#### Components (`src/components/`)
+
+_Pure UI elements (Presentation Layer)._
+
+- **`FileList.tsx`**
+  - **Purpose:** Renders the scrollable list of files OR the "Select Source" empty state.
+  - **Dependencies:** `FileRow.tsx`, `DirEntry` (type)
+- **`FileRow.tsx`**
+  - **Purpose:** Renders a single file row. Contains the "Traffic Light" logic (Green/Red dot).
+  - **Dependencies:** `DirEntry` (type)
+
+#### Hooks (`src/hooks/`)
+
+_Reusable Logic Layer._
+
+- **`useFileSystem.ts`**
+  - **Purpose:** The Bridge between React and Tauri. Handles opening dialogs and scanning folders.
+  - **Dependencies:** `@tauri-apps/plugin-dialog`, `@tauri-apps/plugin-fs`, `appStore`
+
+#### Store (`src/store/`)
+
+_Global State Management._
+
+- **`appStore.ts`**
+  - **Purpose:** The Single Source of Truth. Holds `sourcePath`, `destPath`, and the `fileList`.
+  - **Dependencies:** `zustand`
+
+### 2.3 Backend (`src-tauri/`)
+
+_The Rust Core._
+
+- **`tauri.conf.json`**
+  - **Purpose:** Configures window size, permissions, and bundle identifiers (`com.lastlook.app`).
+- **`capabilities/default.json`**
+  - **Purpose:** Security rules. Explicitly allows the app to access `fs` (File System) and `dialog`.
+- **`src/main.rs`**
+  - **Purpose:** The Rust entry point. Spins up the WebView.
+- **`src/lib.rs`**
+  - **Purpose:** Registers plugins (`tauri-plugin-fs`, `tauri-plugin-dialog`).
 
 ---
 
-## 3. The Refactor Plan (Next Steps)
+## 3. Data Flow
 
-We are moving away from the monolithic `App.tsx` to a modular structure.
-
-### 3.1 Directory Structure
-
-```text
-src/
-├── components/          # "Dumb" UI Elements (Presentation only)
-│   ├── Layout.tsx       # The 3-Pane Grid
-│   ├── FileRow.tsx      # A single file item (Traffic Light logic)
-│   ├── Button.tsx       # Reusable styled buttons
-│   └── Badge.tsx        # "CONNECTED" / "MISSING" badges
-├── hooks/               # "Smart" Logic (Data only)
-│   ├── useFileSystem.ts # Handles scanning and scanning logic
-│   └── useTransfer.ts   # Will handle the copy process
-├── store/               # Global State
-│   └── appState.ts      # (Zustand) Holds sourcePath, destPath
-└── App.tsx              # Main entry, strictly for Layout composition
-```
-
-### 3.2 The Data Flow
-
-1.  **User** clicks "Select Source" -> Calls `useFileSystem`.
-2.  **`useFileSystem`** calls Tauri `plugin-dialog`.
-3.  **Result** is stored in `appState`.
-4.  **`FileList` Component** reads `appState` and renders `FileRow` components.
+1.  **Action:** User clicks "Select Source" in UI.
+2.  **Hook:** `useFileSystem.selectSource()` is called.
+3.  **Bridge:** Calls Tauri `dialog.open()`.
+4.  **Backend:** Rust opens Windows native picker.
+5.  **State:** Path is saved to `appStore`.
+6.  **Reaction:** `FileList` component re-renders because it subscribes to `appStore`.
 
 ---
 
@@ -77,16 +113,34 @@ src/
 - **Borders:** `border-zinc-800`
 - **Text:** `text-zinc-300` (Body), `text-zinc-100` (Headers)
 - **Accents:**
-  - **Success:** `text-emerald-400`, `bg-emerald-500`
-  - **Error:** `text-red-400`, `bg-red-500`
-  - **Folder:** `text-blue-400`, `bg-blue-500`
+  - **Success:** `text-emerald-400`, `bg-emerald-500` (Synced)
+  - **Error:** `text-red-400`, `bg-red-500` (Missing)
+  - **Folder:** `text-blue-400`, `bg-blue-500` (Directory)
 
 ---
 
-## 5. Rust Capabilities (To Be Ported)
+## 5. Implementation Roadmap
 
-Features currently in Python (v1.0) that need Rust implementations:
+### ✅ Phase 1: Foundation (Completed)
 
-- [ ] **MD5 Hashing:** Need a threaded Rust function to hash files without freezing the UI.
-- [ ] **FFmpeg Bridge:** Need `Command::new("ffmpeg")` logic to generate thumbnails.
-- [ ] **Transfer Engine:** Need a buffer-controlled Copy function to report progress.
+- [x] Initialize Tauri v2 + React + TypeScript.
+- [x] Configure Tailwind v4.0.
+- [x] Implement 3-Pane Layout.
+
+### ✅ Phase 2: The Core Logic (Completed)
+
+- [x] **Source Bridge:** Open Native Folder Dialog.
+- [x] **File System:** Read directory contents.
+- [x] **Traffic Light:** "Call and Response" comparison logic.
+- [x] **Refactor:** Break `App.tsx` into Components, Hooks, and Store.
+
+### 🔮 Phase 3: The Inspector (Next)
+
+- [ ] **Selection State:** Track which file is clicked.
+- [ ] **Metadata Display:** Show File Size and Date in the right panel.
+- [ ] **Thumbnail Placeholder:** Prepare UI for future FFmpeg integration.
+
+### 🔮 Phase 4: Rust Backend (Heavy Lifting)
+
+- [ ] **MD5 Hashing:** Move hashing to a threaded Rust command.
+- [ ] **Transfer Engine:** Implement the copy loop in Rust.
