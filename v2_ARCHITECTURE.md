@@ -59,13 +59,13 @@ _The React Frontend logic._
 _Pure UI elements (Presentation Layer)._
 
 - **`FileList.tsx`**
-  - **Purpose:** Renders the scrollable list of source files OR the "Select Source" empty state. Passes `hasDest` state to rows.
+  - **Purpose:** Renders the scrollable list of source files OR the "Select Source" empty state. Passes `hasDest` state to rows. Implements "Snap-To" scrolling via refs.
   - **Dependencies:** `FileRow.tsx`, `DirEntry` (type), `appStore`
 - **`DestFileList.tsx`**
   - **Purpose:** Renders the destination file list. Supports auto-scrolling, synced highlighting, and neutral state (Grey dots) when no Source is active.
   - **Dependencies:** `appStore`
 - **`FileRow.tsx`**
-  - **Purpose:** Renders a single file row. Contains the "Traffic Light" logic (Green/Yellow/Red/Grey dot), Checkboxes, and click handlers.
+  - **Purpose:** Renders a single file row. Contains the "Traffic Light" logic (Green/Yellow/Red/Grey dot), Checkboxes, and click handlers. Wrapped in `forwardRef`.
   - **Dependencies:** `DirEntry` (type)
 - **`Inspector.tsx`**
   - **Purpose:** Displays metadata (Size, Date, Preview) for the currently selected file. Handles `fs.stat` calls and batch size calculations.
@@ -79,7 +79,7 @@ _Reusable Logic Layer._
   - **Purpose:** The Bridge between React and Tauri. Handles opening dialogs, scanning folders, and mounting destinations.
   - **Dependencies:** `@tauri-apps/plugin-dialog`, `@tauri-apps/plugin-fs`, `appStore`
 - **`useTransfer.ts`**
-  - **Purpose:** The Controller. Manages the transfer loop, listens for Rust events (`transfer-progress`, `transfer-verifying`), and enforces batch selection rules.
+  - **Purpose:** The Controller. Manages the transfer loop, listens for Rust events (`transfer-progress`, `transfer-verifying`), handles Cancellation logic, and enforces batch selection rules.
   - **Dependencies:** `appStore`, `@tauri-apps/api/core`
 
 #### Store (`src/store/`)
@@ -108,6 +108,7 @@ _The Rust Core._
   - **Purpose:** The Engine. Contains:
     - `calculate_hash`: High-performance xxHash (xxh3) check using 64MB buffers.
     - `copy_file`: Pipelined Transfer + Verification loop. Emits `transfer-verifying` event between phases.
+    - `cancel_transfer`: Sets atomic flag to interrupt active transfers.
 
 ---
 
@@ -194,7 +195,7 @@ _Goal: Performance Optimization & Flow Control._
 - [x] **I/O Optimization:** Increase buffer size (1MB -> 64MB) and switch to xxHash engine.
 - [x] **Async Verification:** Decouple verification from transfer loop using `transfer-verifying` event.
 - [x] **Amber UI:** "Yellow Dot" and Striped Progress Bar for "Verifying" state.
-- [ ] **Cancel/Pause Logic:** Implement a Rust `Receiver` channel (using `tokio::sync::mpsc`) to interrupt the loop when the user clicks Stop.
+- [x] **Cancel/Pause Logic:** Implement a Rust `Receiver` channel (using `AtomicBool`) to interrupt the loop when the user clicks Stop.
 - [ ] **Job Modal:** A persistent status bar (or modal) that displays progress even if the user navigates away or changes selection.
 - [ ] **Overwrite Protection:** Add a pre-flight check to warn the user before overwriting existing files in the Destination.
 

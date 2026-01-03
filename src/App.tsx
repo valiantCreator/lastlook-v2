@@ -7,6 +7,7 @@ import { FileList } from "./components/FileList";
 import { DestFileList } from "./components/DestFileList";
 import { Inspector } from "./components/Inspector";
 import { useTransfer } from "./hooks/useTransfer";
+import { ConflictModal } from "./components/ConflictModal"; // <--- IMPORT MODAL
 
 function App() {
   // 1. DATA (From Store)
@@ -18,6 +19,8 @@ function App() {
     resetSource,
     checkedFiles,
     verifyingFiles,
+    conflicts, // <--- NEW: Get conflicts list
+    setConflicts, // <--- NEW: To close modal manually
   } = useAppStore();
 
   const {
@@ -29,10 +32,12 @@ function App() {
     unmountDest,
   } = useFileSystem();
 
-  // Destructure cancelTransfer
+  // Destructure cancelTransfer & Resolution Handlers
   const {
     startTransfer,
     cancelTransfer,
+    resolveOverwrite, // <--- NEW
+    resolveSkip, // <--- NEW
     isTransferring,
     currentFile,
     progress,
@@ -57,7 +62,17 @@ function App() {
   const isVerifying = verifyingFiles.size > 0;
 
   return (
-    <div className="h-screen w-screen bg-zinc-950 text-zinc-300 flex overflow-hidden font-sans select-none">
+    <div className="h-screen w-screen bg-zinc-950 text-zinc-300 flex overflow-hidden font-sans select-none relative">
+      {/* --- CONFLICT MODAL --- */}
+      {conflicts.length > 0 && (
+        <ConflictModal
+          conflicts={conflicts}
+          onOverwrite={resolveOverwrite}
+          onSkip={resolveSkip}
+          onCancel={() => setConflicts([])} // Close modal on cancel
+        />
+      )}
+
       {/* --- LEFT PANEL: SOURCE --- */}
       <div className="flex-1 flex flex-col border-r border-zinc-800 min-w-[350px] relative">
         <div className="h-12 border-b border-zinc-800 flex items-center justify-between px-4 bg-zinc-900/50 shrink-0">
@@ -177,13 +192,13 @@ function App() {
                 <div className="h-2 w-full bg-zinc-800 rounded-full overflow-hidden relative">
                   <div
                     className={`
-                         h-full transition-all duration-300 ease-out
-                         ${
-                           isVerifying
-                             ? "bg-yellow-500 progress-stripe"
-                             : "bg-emerald-500"
-                         }
-                       `}
+                          h-full transition-all duration-300 ease-out
+                          ${
+                            isVerifying
+                              ? "bg-yellow-500 progress-stripe"
+                              : "bg-emerald-500"
+                          }
+                        `}
                     style={{ width: `${progress}%` }}
                   />
                 </div>

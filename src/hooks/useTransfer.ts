@@ -24,6 +24,7 @@ export function useTransfer() {
     addVerifyingFile,
     removeVerifyingFile,
     checkedFiles,
+    setConflicts, // <--- NEW
   } = useAppStore();
 
   const [isTransferring, setIsTransferring] = useState(false);
@@ -33,28 +34,58 @@ export function useTransfer() {
   // ABORT REF: Immediate local state to break the loop
   const abortRef = useRef(false);
 
-  // 🛑 CANCEL FUNCTION
+  // 1. CANCEL
   async function cancelTransfer() {
     console.log("🛑 CANCEL REQUESTED");
-    abortRef.current = true; // 1. Local Break
-    await invoke("cancel_transfer"); // 2. Rust Break
+    abortRef.current = true;
+    await invoke("cancel_transfer");
     setIsTransferring(false);
     setCurrentFile("Cancelled");
   }
 
-  async function startTransfer() {
-    if (!sourcePath || !destPath) return;
-    if (checkedFiles.size === 0) return;
+  // 2. PRE-FLIGHT CHECK (Triggers Modal if needed)
+  function startTransfer() {
+    if (!sourcePath || !destPath || checkedFiles.size === 0) return;
 
-    // RESET STATE
+    // A. Detect Conflicts
+    const { destFiles } = useAppStore.getState();
+    const conflicts: string[] = [];
+
+    checkedFiles.forEach((filename) => {
+      if (destFiles.has(filename)) {
+        conflicts.push(filename);
+      }
+    });
+
+    if (conflicts.length > 0) {
+      // B. Found Conflicts -> Pause & Show Modal
+      console.log("Found conflicts:", conflicts);
+      setConflicts(conflicts); // This opens the modal in App.tsx
+      return;
+    }
+
+    // C. No Conflicts -> Go straight to overwrite mode (safe because nothing to overwrite)
+    executeTransfer(false);
+  }
+
+  // 3. RESOLUTION HANDLERS
+  function resolveOverwrite() {
+    setConflicts([]); // Close Modal
+    executeTransfer(false); // False = Don't skip, just overwrite
+  }
+
+  function resolveSkip() {
+    setConflicts([]); // Close Modal
+    executeTransfer(true); // True = Skip existing files
+  }
+
+  // 4. THE MAIN LOOP (Now accepts skipExisting flag)
+  async function executeTransfer(skipExisting: boolean) {
     setIsTransferring(true);
     setProgress(0);
-    abortRef.current = false; // Reset the brake
+    abortRef.current = false;
 
-    // Ensure Rust state is clean (optional, but good practice)
-    // await invoke('reset_cancel_flag'); // If we exposed this, but copy_file checks on entry anyway.
-
-    // 1. LISTEN FOR PROGRESS (Update Bar)
+    // Listeners
     const unlistenProgress = await listen<ProgressEvent>(
       "transfer-progress",
       (event) => {
@@ -87,11 +118,18 @@ export function useTransfer() {
 
         if (file.isDirectory) continue;
 
-        // Skip if already verified (Optimization)
+        // --- SKIP LOGIC ---
+        // If skipExisting is TRUE, and file is in destFiles, we skip it.
+        if (skipExisting && useAppStore.getState().destFiles.has(file.name)) {
+          console.log(`Skipping existing file: ${file.name}`);
+          continue;
+        }
+
+        // Optimization: Skip if already verified in this session
         if (useAppStore.getState().verifiedFiles.has(file.name)) continue;
 
-        const srcSeparator = sourcePath.endsWith("\\") ? "" : "\\";
-        const destSeparator = destPath.endsWith("\\") ? "" : "\\";
+        const srcSeparator = sourcePath!.endsWith("\\") ? "" : "\\";
+        const destSeparator = destPath!.endsWith("\\") ? "" : "\\";
 
         const fullSource = `${sourcePath}${srcSeparator}${file.name}`;
         const fullDest = `${destPath}${destSeparator}${file.name}`;
@@ -100,7 +138,7 @@ export function useTransfer() {
           // RUN TRANSFER
           await invoke("copy_file", { source: fullSource, dest: fullDest });
 
-          // SUCCESS HANDLERS
+          // SUCCESS
           removeVerifyingFile(file.name);
           const currentDestFiles = new Set(useAppStore.getState().destFiles);
           currentDestFiles.add(file.name);
@@ -111,7 +149,7 @@ export function useTransfer() {
           if (err.toString().includes("CANCELLED")) {
             console.warn("Transfer Cancelled: ", file.name);
             removeVerifyingFile(file.name);
-            break; // Break the for-loop
+            break;
           }
           console.error("Transfer Error:", err);
           removeVerifyingFile(file.name);
@@ -140,8 +178,10 @@ export function useTransfer() {
   }
 
   return {
-    startTransfer,
-    cancelTransfer, // <--- Export this
+    startTransfer, // The public trigger
+    cancelTransfer,
+    resolveOverwrite, // <--- New Export
+    resolveSkip, // <--- New Export
     isTransferring,
     currentFile,
     progress,

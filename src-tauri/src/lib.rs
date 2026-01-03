@@ -42,10 +42,9 @@ async fn copy_file(
     dest: String
 ) -> Result<String, String> {
     
-    // RESET ABORT FLAG AT START
-    if state.should_abort.load(Ordering::Relaxed) {
-        return Err("Transfer Cancelled by User".to_string());
-    }
+    // --- THE FIX: RESET THE BRAKE AT THE START ---
+    // Always assume we are starting fresh unless told otherwise mid-transfer.
+    state.should_abort.store(false, Ordering::Relaxed);
 
     let filename = std::path::Path::new(&source)
         .file_name()
