@@ -17,12 +17,19 @@ export function FileList({
   onSelectSource,
   onClearSource,
 }: FileListProps) {
-  // We now grab 'verifiedFiles' from the store
-  const { selectedFile, setSelectedFile, verifiedFiles } = useAppStore();
+  const {
+    selectedFile,
+    setSelectedFile,
+    verifiedFiles,
+    checkedFiles,
+    toggleChecked,
+    checkAllMissing,
+  } = useAppStore();
 
+  // 1. EMPTY STATE: NO SOURCE SELECTED
   if (!sourcePath) {
     return (
-      <div className="absolute inset-0 flex flex-col items-center justify-center">
+      <div className="flex-1 flex flex-col items-center justify-center p-4">
         <button
           onClick={onSelectSource}
           className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-4 py-2 rounded-md text-sm border border-zinc-700 transition-all cursor-pointer shadow-lg active:scale-95"
@@ -34,7 +41,7 @@ export function FileList({
     );
   }
 
-  // 2. EMPTY FOLDER (Source Selected, but no files)
+  // 2. EMPTY STATE: FOLDER HAS NO FILES
   if (files.length === 0) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center opacity-50">
@@ -49,22 +56,33 @@ export function FileList({
     );
   }
 
-  // 3. POPULATED LIST
+  // 3. ACTIVE STATE: FILE LIST
   return (
-    <div className="flex-1 overflow-y-auto p-2 space-y-1 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent">
-      {files.map((file) => (
-        <FileRow
-          key={file.name}
-          file={file}
-          isSynced={destFiles.has(file.name)}
-          isVerified={verifiedFiles.has(file.name)} // <--- Pass the new prop
-          isSelected={selectedFile?.name === file.name}
-          onSelect={() => setSelectedFile(file)}
-        />
-      ))}
+    <div className="flex-1 flex flex-col h-full min-h-0">
+      <div className="flex-1 overflow-y-auto p-2 space-y-1 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent">
+        {files.map((file) => (
+          <FileRow
+            key={file.name}
+            file={file}
+            isSynced={destFiles.has(file.name)}
+            isVerified={verifiedFiles.has(file.name)}
+            isSelected={selectedFile?.name === file.name}
+            isChecked={checkedFiles.has(file.name)}
+            onSelect={() => setSelectedFile(file)}
+            onCheck={() => toggleChecked(file.name)}
+          />
+        ))}
+      </div>
 
-      {/* Footer Reset Button */}
-      <div className="sticky bottom-0 pt-2 bg-gradient-to-t from-zinc-900 to-transparent flex justify-center pb-2">
+      {/* Footer Actions */}
+      <div className="p-3 bg-zinc-900 border-t border-zinc-800 flex justify-between items-center shrink-0">
+        <button
+          onClick={checkAllMissing}
+          className="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-3 py-1.5 rounded border border-zinc-700 transition-colors cursor-pointer"
+        >
+          Select All Missing Files
+        </button>
+
         <button
           onClick={onClearSource}
           className="text-[10px] text-zinc-500 hover:text-zinc-300 underline cursor-pointer"

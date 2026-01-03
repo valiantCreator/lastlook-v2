@@ -10,17 +10,29 @@ interface ProgressEvent {
 }
 
 export function useTransfer() {
-  // 1. GET THE SETTER
-  // We need 'destFiles' and 'setDestFiles' to update the UI in real-time
-  const { fileList, sourcePath, destPath, destFiles, setDestFiles } =
-    useAppStore();
+  // 1. GET THE STORE DATA
+  const {
+    fileList,
+    sourcePath,
+    destPath,
+    destFiles,
+    setDestFiles,
+    addVerifiedFile,
+    checkedFiles, // <--- Crucial: Needed for the filter logic below
+  } = useAppStore();
 
   const [isTransferring, setIsTransferring] = useState(false);
   const [currentFile, setCurrentFile] = useState<string>("");
   const [progress, setProgress] = useState(0);
 
   async function startTransfer() {
-    if (!sourcePath || !destPath || fileList.length === 0) return;
+    if (!sourcePath || !destPath) return;
+
+    // SAFETY: Require selection
+    if (checkedFiles.size === 0) {
+      console.warn("No files selected for transfer");
+      return;
+    }
 
     setIsTransferring(true);
     setProgress(0);
@@ -37,10 +49,13 @@ export function useTransfer() {
     );
 
     try {
-      for (const file of fileList) {
+      // FILTER: Only process files that are in the 'checkedFiles' Set
+      const filesToTransfer = fileList.filter((f) => checkedFiles.has(f.name));
+
+      for (const file of filesToTransfer) {
         if (file.isDirectory) continue;
 
-        // Skip if already VERIFIED (Strict check)
+        // Skip if already verified (Optimization)
         if (useAppStore.getState().verifiedFiles.has(file.name)) continue;
 
         const srcSeparator = sourcePath.endsWith("\\") ? "" : "\\";
@@ -49,21 +64,20 @@ export function useTransfer() {
         const fullSource = `${sourcePath}${srcSeparator}${file.name}`;
         const fullDest = `${destPath}${destSeparator}${file.name}`;
 
-        // RUN TRANSFER & VERIFY
-        // Now wait for the Result (which is the Hash String)
+        // RUN TRANSFER
         await invoke("copy_file", { source: fullSource, dest: fullDest });
 
-        // ✨ UPDATE STATE ✨
+        // UPDATE STATE
         // 1. Mark as Present (Green Dot)
         const currentDestFiles = new Set(useAppStore.getState().destFiles);
         currentDestFiles.add(file.name);
         setDestFiles(currentDestFiles);
 
         // 2. Mark as Verified (Shield Icon)
-        useAppStore.getState().addVerifiedFile(file.name);
+        addVerifiedFile(file.name);
       }
 
-      console.log("Transfer & Verification Complete!");
+      console.log("Batch Transfer Complete!");
     } catch (err) {
       console.error("Transfer Error:", err);
       // In a real app, we would show a toast notification here

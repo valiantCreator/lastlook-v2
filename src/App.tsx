@@ -1,11 +1,11 @@
-import { Inspector } from "./components/Inspector";
-import { useEffect } from "react"; // <--- ADD THIS
-import { invoke } from "@tauri-apps/api/core"; // <--- Ensure this is here too
-import { FileList } from "./components/FileList";
-import { useAppStore } from "./store/appStore";
-import { useFileSystem } from "./hooks/useFileSystem";
-import { useTransfer } from "./hooks/useTransfer";
 import "./App.css";
+import { useEffect } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { useFileSystem } from "./hooks/useFileSystem";
+import { useAppStore } from "./store/appStore";
+import { FileList } from "./components/FileList";
+import { Inspector } from "./components/Inspector";
+import { useTransfer } from "./hooks/useTransfer";
 
 function App() {
   // 1. DATA (From Store)
@@ -14,103 +14,116 @@ function App() {
     destPath,
     fileList,
     destFiles,
-    setDestPath,
     resetSource,
+    checkedFiles,
   } = useAppStore();
 
-  // 2. LOGIC (From Hook)
-  const { selectSource, selectDest } = useFileSystem();
-
+  const {
+    selectSource,
+    selectDest,
+    scanSource,
+    scanDest,
+    clearSource,
+    unmountDest,
+  } = useFileSystem();
   const { startTransfer, isTransferring, currentFile, progress } =
     useTransfer();
 
-  // TEST BRIDGE ON MOUNT
+  // 1. INITIAL SETUP
   useEffect(() => {
-    async function testBridge() {
-      try {
-        // 'verify_connection' must match the function name in Rust
-        const response = await invoke("verify_connection", {
-          name: "LastLook UI",
-        });
-        console.log("✅ BACKEND SAYS:", response);
-      } catch (error) {
-        console.error("❌ BRIDGE FAILED:", error);
-      }
-    }
-    testBridge();
+    invoke("verify_connection", { name: "LastLook UI" }).catch(console.error);
   }, []);
+
+  // 2. AUTO-SCAN TRIGGERS
+  useEffect(() => {
+    if (sourcePath) scanSource();
+  }, [sourcePath]);
+
+  // NEW: Update "Green Dots" whenever Destination changes
+  useEffect(() => {
+    if (destPath) scanDest(destPath);
+  }, [destPath]);
 
   return (
     <div className="h-screen w-screen bg-zinc-950 text-zinc-300 flex overflow-hidden font-sans select-none">
-      {/* 1. LEFT PANEL (Source) */}
-      <div className="w-[30%] h-full border-r border-zinc-800 flex flex-col">
-        <div className="h-12 border-b border-zinc-800 flex items-center px-4 bg-zinc-900/50 justify-between">
+      {/* --- LEFT PANEL: SOURCE --- */}
+      <div className="flex-1 flex flex-col border-r border-zinc-800 min-w-[350px] relative">
+        <div className="h-12 border-b border-zinc-800 flex items-center justify-between px-4 bg-zinc-900/50 shrink-0">
           <span className="font-bold text-sm tracking-wide text-zinc-100">
             SOURCE
           </span>
-          <span className="text-[10px] text-zinc-500 font-mono truncate max-w-[120px]">
-            {sourcePath}
-          </span>
+          {sourcePath && (
+            <span
+              className="text-[10px] font-mono text-zinc-500 truncate max-w-[200px]"
+              title={sourcePath}
+            >
+              {sourcePath}
+            </span>
+          )}
         </div>
-        <div className="flex-1 flex flex-col bg-zinc-900/20 overflow-hidden relative">
-          <FileList
-            sourcePath={sourcePath}
-            files={fileList}
-            destFiles={destFiles}
-            onSelectSource={selectSource} // <--- Clean!
-            onClearSource={resetSource}
-          />
-        </div>
+
+        <FileList
+          sourcePath={sourcePath}
+          files={fileList}
+          destFiles={destFiles}
+          onSelectSource={selectSource}
+          onClearSource={() => {
+            clearSource();
+            resetSource();
+          }}
+        />
       </div>
 
-      {/* 2. CENTER PANEL */}
-      <div className="flex-1 h-full flex flex-col bg-zinc-950/50">
-        <div className="h-12 border-b border-zinc-800 flex items-center px-4 justify-between bg-zinc-900/50">
+      {/* --- CENTER PANEL: DESTINATION --- */}
+      <div className="flex-1 flex flex-col min-w-[350px] bg-zinc-900/10 relative">
+        {/* Header with UNMOUNT BUTTON */}
+        <div className="h-12 border-b border-zinc-800 flex items-center justify-between px-4 bg-zinc-900/50 shrink-0">
           <span className="font-bold text-sm tracking-wide text-zinc-100">
             DESTINATION
           </span>
-          <span
-            className={`text-[10px] px-2 py-1 rounded transition-colors ${
-              destPath
-                ? "bg-emerald-500/10 text-emerald-500"
-                : "bg-red-500/10 text-red-500"
-            }`}
-          >
-            {destPath ? "CONNECTED" : "NOT SET"}
-          </span>
-        </div>
-        <div className="flex-1 p-4 flex flex-col items-center justify-center">
-          {!destPath ? (
-            <div className="text-center">
+          {destPath && (
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] bg-emerald-500/10 text-emerald-500 px-2 py-0.5 rounded border border-emerald-500/20">
+                CONNECTED
+              </span>
               <button
-                onClick={selectDest}
-                className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-4 py-2 rounded-md text-sm border border-zinc-700 transition-all cursor-pointer shadow-lg"
+                onClick={unmountDest}
+                className="text-[10px] text-zinc-500 hover:text-zinc-300 underline cursor-pointer"
               >
-                + Select Destination
-              </button>
-              <p className="mt-2 text-xs text-zinc-600">Select Backup Drive</p>
-            </div>
-          ) : (
-            <div className="w-full h-full flex flex-col items-center justify-center space-y-4">
-              <div className="bg-zinc-900/50 p-4 rounded-lg border border-zinc-800 max-w-sm w-full">
-                <p className="text-[10px] text-zinc-500 uppercase tracking-wider font-bold mb-1">
-                  Target Path
-                </p>
-                <p className="text-xs text-emerald-400 font-mono break-all">
-                  {destPath}
-                </p>
-              </div>
-              <button
-                onClick={() => setDestPath(null)}
-                className="text-[10px] text-zinc-600 hover:text-zinc-400 underline cursor-pointer"
-              >
-                Unmount Destination
+                Unmount
               </button>
             </div>
           )}
         </div>
-        {/* Footer: Transfer Controls */}
-        <div className="h-20 border-t border-zinc-800 flex flex-col items-center justify-center bg-zinc-900/20 px-4">
+
+        {/* Content */}
+        <div className="flex-1 p-4 flex flex-col">
+          {!destPath ? (
+            <div className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-zinc-800 rounded-xl hover:border-zinc-700 transition-colors bg-zinc-900/20">
+              <button
+                onClick={selectDest}
+                className="px-6 py-3 bg-zinc-800 text-zinc-200 rounded-lg hover:bg-zinc-700 font-medium transition-all shadow-xl active:scale-95 border border-zinc-700"
+              >
+                Select Destination Drive
+              </button>
+            </div>
+          ) : (
+            <div className="flex-1 border border-zinc-800 rounded-xl bg-zinc-900/30 p-4 relative group">
+              <div className="absolute top-4 left-4">
+                <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-1">
+                  Target Path
+                </p>
+                <p className="text-xs font-mono text-emerald-400 break-all">
+                  {destPath}
+                </p>
+              </div>
+              {/* Note: Unmount button moved to Header for better visibility */}
+            </div>
+          )}
+        </div>
+
+        {/* Footer Actions */}
+        <div className="h-20 border-t border-zinc-800 flex flex-col items-center justify-center bg-zinc-900/20 px-4 shrink-0">
           {isTransferring ? (
             <div className="w-full max-w-xs space-y-2">
               <div className="flex justify-between text-[10px] text-zinc-400 font-mono uppercase">
@@ -129,24 +142,28 @@ function App() {
           ) : (
             <button
               onClick={startTransfer}
-              disabled={!sourcePath || !destPath}
-              className={`px-6 py-2 rounded-lg font-medium transition-all text-sm shadow-lg
-         ${
-           !sourcePath || !destPath
-             ? "bg-zinc-800 text-zinc-600 cursor-not-allowed shadow-none"
-             : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-900/20 cursor-pointer hover:scale-105 active:scale-95"
-         }
-       `}
+              disabled={!sourcePath || !destPath || checkedFiles.size === 0}
+              className={`w-full max-w-sm py-3 rounded-md font-bold text-xs uppercase tracking-wider transition-all shadow-lg
+                 ${
+                   !sourcePath || !destPath || checkedFiles.size === 0
+                     ? "bg-zinc-800 text-zinc-600 cursor-not-allowed shadow-none border border-zinc-700"
+                     : "bg-red-600 hover:bg-red-500 text-white shadow-red-900/20 cursor-pointer active:scale-95 border border-red-500"
+                 }
+               `}
             >
-              Start Transfer
+              {checkedFiles.size > 0
+                ? `Transfer ${checkedFiles.size} File${
+                    checkedFiles.size === 1 ? "" : "s"
+                  }`
+                : "Select Files to Transfer"}
             </button>
           )}
         </div>
       </div>
 
-      {/* 3. RIGHT PANEL */}
-      <div className="w-80 h-full border-l border-zinc-800 flex flex-col bg-zinc-900/30">
-        <div className="h-12 border-b border-zinc-800 flex items-center px-4 bg-zinc-900/50">
+      {/* --- RIGHT PANEL: INSPECTOR --- */}
+      <div className="w-[300px] border-l border-zinc-800 flex flex-col bg-zinc-900/30 shrink-0">
+        <div className="h-12 border-b border-zinc-800 flex items-center px-4 bg-zinc-900/50 shrink-0">
           <span className="font-bold text-sm tracking-wide text-zinc-100">
             INSPECTOR
           </span>

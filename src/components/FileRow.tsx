@@ -3,9 +3,11 @@ import { DirEntry } from "@tauri-apps/plugin-fs";
 interface FileRowProps {
   file: DirEntry;
   isSynced: boolean;
-  isVerified: boolean; // <--- NEW PROP
-  isSelected: boolean;
-  onSelect: () => void;
+  isVerified: boolean;
+  isSelected: boolean; // Active in Inspector
+  isChecked: boolean; // Checked for Transfer
+  onSelect: () => void; // Click Row
+  onCheck: () => void; // Click Checkbox
 }
 
 export function FileRow({
@@ -13,13 +15,15 @@ export function FileRow({
   isSynced,
   isVerified,
   isSelected,
+  isChecked,
   onSelect,
+  onCheck,
 }: FileRowProps) {
   return (
     <div
       onClick={onSelect}
       className={`
-        flex items-center gap-2 p-2 rounded cursor-pointer group transition-all duration-200 border
+        flex items-center gap-3 p-2 rounded cursor-pointer group transition-all duration-200 border select-none
         ${
           isSelected
             ? "bg-zinc-800 border-zinc-700 shadow-md"
@@ -27,6 +31,42 @@ export function FileRow({
         }
       `}
     >
+      {/* CHECKBOX (Only for files, not folders yet) */}
+      {!file.isDirectory ? (
+        <div
+          onClick={(e) => {
+            e.stopPropagation(); // Don't trigger Inspector when checking
+            onCheck();
+          }}
+          className={`
+            w-4 h-4 rounded border flex items-center justify-center transition-all
+            ${
+              isChecked
+                ? "bg-emerald-500 border-emerald-500 text-black"
+                : "border-zinc-600 bg-zinc-900/50 hover:border-zinc-500"
+            }
+          `}
+        >
+          {isChecked && (
+            <svg
+              className="w-3 h-3 font-bold"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={3}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M5 13l4 4L19 7"
+              />
+            </svg>
+          )}
+        </div>
+      ) : (
+        <div className="w-4 h-4" /> // Spacer for folders
+      )}
+
       {/* TRAFFIC LIGHT DOT */}
       <div
         className={`w-2 h-2 rounded-full shadow-[0_0_8px_rgba(0,0,0,0.5)] transition-all duration-300
@@ -58,7 +98,7 @@ export function FileRow({
             {file.name}
           </p>
 
-          {/* SHIELD CHECK ICON */}
+          {/* VERIFIED SHIELD ICON 🛡️ */}
           {isVerified && (
             <svg
               className="w-3 h-3 text-emerald-400 animate-in zoom-in duration-300"
