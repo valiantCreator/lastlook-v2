@@ -1,6 +1,6 @@
 # LastLook v2.0: Architecture & Technical Specs
 
-**Status:** Beta (Batch & Sync Logic Active)
+**Status:** Beta (Async Verification Active)
 **Stack:** Tauri (Rust) + React (TypeScript) + Tailwind CSS + Zustand
 **Date:** January 3, 2026
 
@@ -51,7 +51,7 @@ _The React Frontend logic._
   - **Purpose:** The main layout container (Source/Dest/Inspector Grid). It composes the UI but contains **no logic**.
   - **Dependencies:** `FileList.tsx`, `DestFileList.tsx`, `Inspector.tsx`, `useFileSystem`, `appStore`
 - **`App.css`**
-  - **Purpose:** Entry point for Tailwind directives (`@import "tailwindcss"`).
+  - **Purpose:** Entry point for Tailwind directives (`@import "tailwindcss"`) and Custom Keyframe Animations (e.g., `.progress-stripe`).
   - **Dependencies:** Tailwind
 
 #### Components (`src/components/`)
@@ -59,13 +59,13 @@ _The React Frontend logic._
 _Pure UI elements (Presentation Layer)._
 
 - **`FileList.tsx`**
-  - **Purpose:** Renders the scrollable list of source files OR the "Select Source" empty state.
+  - **Purpose:** Renders the scrollable list of source files OR the "Select Source" empty state. Passes `hasDest` state to rows.
   - **Dependencies:** `FileRow.tsx`, `DirEntry` (type), `appStore`
 - **`DestFileList.tsx`**
-  - **Purpose:** Renders the destination file list. Supports auto-scrolling and synced highlighting.
+  - **Purpose:** Renders the destination file list. Supports auto-scrolling, synced highlighting, and neutral state (Grey dots) when no Source is active.
   - **Dependencies:** `appStore`
 - **`FileRow.tsx`**
-  - **Purpose:** Renders a single file row. Contains the "Traffic Light" logic (Green/Red dot), Checkboxes, and click handlers.
+  - **Purpose:** Renders a single file row. Contains the "Traffic Light" logic (Green/Yellow/Red/Grey dot), Checkboxes, and click handlers.
   - **Dependencies:** `DirEntry` (type)
 - **`Inspector.tsx`**
   - **Purpose:** Displays metadata (Size, Date, Preview) for the currently selected file. Handles `fs.stat` calls and batch size calculations.
@@ -79,7 +79,7 @@ _Reusable Logic Layer._
   - **Purpose:** The Bridge between React and Tauri. Handles opening dialogs, scanning folders, and mounting destinations.
   - **Dependencies:** `@tauri-apps/plugin-dialog`, `@tauri-apps/plugin-fs`, `appStore`
 - **`useTransfer.ts`**
-  - **Purpose:** The Controller. Manages the transfer loop, listens for Rust events (`transfer-progress`), and enforces batch selection rules.
+  - **Purpose:** The Controller. Manages the transfer loop, listens for Rust events (`transfer-progress`, `transfer-verifying`), and enforces batch selection rules.
   - **Dependencies:** `appStore`, `@tauri-apps/api/core`
 
 #### Store (`src/store/`)
@@ -87,7 +87,7 @@ _Reusable Logic Layer._
 _Global State Management._
 
 - **`appStore.ts`**
-  - **Purpose:** The Single Source of Truth. Holds `sourcePath`, `destPath`, `fileList`, `destFiles`, `verifiedFiles`, `checkedFiles` (Batch), and `selectedFile`.
+  - **Purpose:** The Single Source of Truth. Holds `sourcePath`, `destPath`, `fileList`, `destFiles`, `verifiedFiles`, `verifyingFiles` (Amber State), `checkedFiles` (Batch), and `selectedFile`.
   - **Dependencies:** `zustand`
 
 ### 2.3 Backend (`src-tauri/`)
@@ -106,8 +106,8 @@ _The Rust Core._
   - **Purpose:** The Rust entry point. Spins up the WebView.
 - **`src/lib.rs`**
   - **Purpose:** The Engine. Contains:
-    - `calculate_hash`: Independent MD5 check.
-    - `copy_file`: Pipelined Transfer + Verification loop (Read -> Hash -> Write -> Read -> Verify).
+    - `calculate_hash`: High-performance xxHash (xxh3) check using 64MB buffers.
+    - `copy_file`: Pipelined Transfer + Verification loop. Emits `transfer-verifying` event between phases.
 
 ---
 
@@ -118,8 +118,11 @@ _The Rust Core._
 3.  **Bridge:** Calls Tauri `dialog.open()`.
 4.  **Backend:** Rust opens Windows native picker.
 5.  **State:** Path is saved to `appStore`.
-6.  **Reaction:** `FileList` component re-renders because it subscribes to `appStore`.
-7.  **Interaction:** User checks a box -> `checkedFiles` Set updates -> `Inspector` calculates total batch size via `fs.stat`.
+6.  **Reaction:** `FileList` component re-renders. Dots appear **Grey** (Neutral) until Dest is selected.
+7.  **Action:** User starts Transfer.
+8.  **Event:** Rust emits `transfer-progress` -> UI updates Blue/Green bar.
+9.  **Event:** Rust emits `transfer-verifying` -> UI updates to **Yellow** bar/dot.
+10. **Completion:** Verification passes -> UI updates to **Green** dot + Shield.
 
 ---
 
@@ -129,8 +132,10 @@ _The Rust Core._
 - **Borders:** `border-zinc-800`
 - **Text:** `text-zinc-300` (Body), `text-zinc-100` (Headers)
 - **Accents:**
-  - **Success:** `text-emerald-400`, `bg-emerald-500` (Synced)
+  - **Success:** `text-emerald-400`, `bg-emerald-500` (Synced/Verified)
+  - **Verifying:** `text-yellow-400`, `bg-yellow-500` (Pending Integrity Check)
   - **Error:** `text-red-400`, `bg-red-500` (Missing)
+  - **Neutral:** `text-zinc-500`, `bg-zinc-600` (No Drive Connected)
   - **Folder:** `text-blue-400`, `bg-blue-500` (Directory)
 
 ---
@@ -160,13 +165,13 @@ _The Rust Core._
 ### ✅ Phase 4: Rust Backend (The Engine) (Completed)
 
 - [x] **Custom Commands:** Create `src-tauri/src/lib.rs` functions.
-- [x] **MD5 Hashing:** Multithreaded file verification.
+- [x] **Hashing:** Multithreaded file verification (Upgraded to xxHash in Phase 7).
 - [x] **Transfer Loop:** The copy process with progress events.
 - [x] **Real-Time UI:** `useTransfer` hook updates the Traffic Lights instantly.
 
 ### ✅ Phase 5: Verification & Polish (Completed)
 
-- [x] **xxHash/MD5 Integration:** Hashing occurs _during_ the transfer stream.
+- [x] **Hashing Integration:** Hashing occurs _during_ the transfer stream.
 - [x] **Verification Logic:** Compare Source Hash vs. Dest Hash.
 - [x] **UI Cleanup:** Remove debug buttons.
 - [x] **Verified Badge:** Show a Shield icon for confirmed transfers.
@@ -182,13 +187,14 @@ _Goal: Restore v1 Parity for Selection & Stats._
 - [x] **Synced Highlight:** Clicking a file highlights it in both Source & Dest lists.
 - [x] **Cleanup:** Remove the debug "Generate Hash" button.
 
-### 🔮 Phase 7: The Controller
+### 🔮 Phase 7: The Controller (In Progress)
 
 _Goal: Performance Optimization & Flow Control._
 
-- [ ] **I/O Optimization:** Increase buffer size (1MB -> 64MB) to maximize disk throughput.
-- [ ] **Async Verification:** Decouple the final MD5 check from the UI thread so the app remains responsive during validation.
-- [ ] **Cancel/Pause Logic:** Implement a Rust `Receiver` channel (using `tokio::sync::mpsc` or `std::sync::mpsc`) to interrupt the loop when the user clicks Stop.
+- [x] **I/O Optimization:** Increase buffer size (1MB -> 64MB) and switch to xxHash engine.
+- [x] **Async Verification:** Decouple verification from transfer loop using `transfer-verifying` event.
+- [x] **Amber UI:** "Yellow Dot" and Striped Progress Bar for "Verifying" state.
+- [ ] **Cancel/Pause Logic:** Implement a Rust `Receiver` channel (using `tokio::sync::mpsc`) to interrupt the loop when the user clicks Stop.
 - [ ] **Job Modal:** A persistent status bar (or modal) that displays progress even if the user navigates away or changes selection.
 - [ ] **Overwrite Protection:** Add a pre-flight check to warn the user before overwriting existing files in the Destination.
 

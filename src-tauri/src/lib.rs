@@ -1,13 +1,26 @@
-use tauri::{AppHandle, Emitter}; 
-use std::fs::File;
+use tauri::{AppHandle, Emitter, State}; // Removed 'Manager'
+use std::fs::{self, File};
 use std::io::{Read, Write};
 use xxhash_rust::xxh3::Xxh3;
-use std::time::Instant; // <--- NEW: Stopwatch
+use std::time::Instant;
+use std::sync::atomic::{AtomicBool, Ordering};
+// Removed 'use std::sync::Arc;'
 
-// COMMAND 1: Calculate Hash (xxHash)
+// 1. STATE: The Global "Abort" Button
+struct TransferState {
+    should_abort: AtomicBool,
+}
+
+// COMMAND 1: Cancel Signal
+#[tauri::command]
+fn cancel_transfer(state: State<'_, TransferState>) {
+    println!("🛑 ABORT SIGNAL RECEIVED");
+    state.should_abort.store(true, Ordering::Relaxed);
+}
+
+// COMMAND 2: Calculate Hash (Helper)
 #[tauri::command]
 async fn calculate_hash(path: String) -> Result<String, String> {
-    // println!("🦀 Hashing: {}", path); // Commented out to reduce noise
     let mut file = File::open(&path).map_err(|e| e.to_string())?;
     let mut hasher = Xxh3::new();
     let mut buffer = vec![0; 64 * 1024 * 1024]; 
@@ -20,11 +33,20 @@ async fn calculate_hash(path: String) -> Result<String, String> {
     Ok(format!("{:x}", hasher.digest()))
 }
 
-// COMMAND 2: The Transfer Engine (Instrumented ⏱️)
+// COMMAND 3: The Transfer Engine (Now Interruptible 🛑)
 #[tauri::command]
-async fn copy_file(app: AppHandle, source: String, dest: String) -> Result<String, String> {
-    // 1. Setup
-    // Extract just the filename for the UI event
+async fn copy_file(
+    app: AppHandle, 
+    state: State<'_, TransferState>, 
+    source: String, 
+    dest: String
+) -> Result<String, String> {
+    
+    // RESET ABORT FLAG AT START
+    if state.should_abort.load(Ordering::Relaxed) {
+        return Err("Transfer Cancelled by User".to_string());
+    }
+
     let filename = std::path::Path::new(&source)
         .file_name()
         .unwrap_or_default()
@@ -38,7 +60,7 @@ async fn copy_file(app: AppHandle, source: String, dest: String) -> Result<Strin
     let mut dst_file = File::create(&dest).map_err(|e| format!("Create failed: {}", e))?;
     
     // --- PHASE 1: COPY & HASH ---
-    println!("🚀 STARTING TRANSFER: {} ({:.2} MB)", filename, total_size as f64 / 1_048_576.0);
+    println!("🚀 STARTING TRANSFER: {}", filename);
     let start_transfer = Instant::now();
 
     let mut src_hasher = Xxh3::new();
@@ -46,6 +68,14 @@ async fn copy_file(app: AppHandle, source: String, dest: String) -> Result<Strin
     let mut transferred: u64 = 0;
 
     loop {
+        // 🛑 EMERGENCY BRAKE CHECK
+        if state.should_abort.load(Ordering::Relaxed) {
+            println!("🛑 CUTTING POWER: Deleting partial file...");
+            drop(dst_file); // Close file handle
+            let _ = fs::remove_file(&dest); // Delete garbage
+            return Err("CANCELLED".to_string());
+        }
+
         let bytes_read = src_file.read(&mut buffer).map_err(|e| e.to_string())?;
         if bytes_read == 0 { break; }
 
@@ -74,11 +104,14 @@ async fn copy_file(app: AppHandle, source: String, dest: String) -> Result<Strin
         filename: filename.clone(),
     }).map_err(|e| e.to_string())?;
 
-    // --- PHASE 2: VERIFICATION (READ BACK) ---
+    // --- PHASE 2: VERIFICATION ---
     println!("🛡️ STARTING VERIFICATION...");
     let start_verify = Instant::now();
 
-    // We call the helper function, which reads the file from disk again
+    if state.should_abort.load(Ordering::Relaxed) {
+        return Err("CANCELLED".to_string());
+    }
+
     let dst_hash = calculate_hash(dest).await?;
 
     let duration_verify = start_verify.elapsed();
@@ -87,10 +120,8 @@ async fn copy_file(app: AppHandle, source: String, dest: String) -> Result<Strin
 
     // --- REPORT ---
     if src_hash == dst_hash {
-        println!("🎉 TOTAL TIME: {:.2}s", duration_transfer.as_secs_f64() + duration_verify.as_secs_f64());
         Ok(src_hash)
     } else {
-        println!("❌ HASH MISMATCH");
         Err(format!("Verification Failed for {}", filename))
     }
 }
@@ -111,12 +142,14 @@ struct VerifyingPayload {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(TransferState { should_abort: AtomicBool::new(false) })
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             calculate_hash,
-            copy_file 
+            copy_file,
+            cancel_transfer 
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

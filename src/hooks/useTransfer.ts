@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useAppStore } from "../store/appStore";
@@ -21,8 +21,8 @@ export function useTransfer() {
     destPath,
     setDestFiles,
     addVerifiedFile,
-    addVerifyingFile, // <--- NEW ACTION
-    removeVerifyingFile, // <--- NEW ACTION
+    addVerifyingFile,
+    removeVerifyingFile,
     checkedFiles,
   } = useAppStore();
 
@@ -30,17 +30,29 @@ export function useTransfer() {
   const [currentFile, setCurrentFile] = useState<string>("");
   const [progress, setProgress] = useState(0);
 
+  // ABORT REF: Immediate local state to break the loop
+  const abortRef = useRef(false);
+
+  // 🛑 CANCEL FUNCTION
+  async function cancelTransfer() {
+    console.log("🛑 CANCEL REQUESTED");
+    abortRef.current = true; // 1. Local Break
+    await invoke("cancel_transfer"); // 2. Rust Break
+    setIsTransferring(false);
+    setCurrentFile("Cancelled");
+  }
+
   async function startTransfer() {
     if (!sourcePath || !destPath) return;
+    if (checkedFiles.size === 0) return;
 
-    // SAFETY: Require selection
-    if (checkedFiles.size === 0) {
-      console.warn("No files selected for transfer");
-      return;
-    }
-
+    // RESET STATE
     setIsTransferring(true);
     setProgress(0);
+    abortRef.current = false; // Reset the brake
+
+    // Ensure Rust state is clean (optional, but good practice)
+    // await invoke('reset_cancel_flag'); // If we exposed this, but copy_file checks on entry anyway.
 
     // 1. LISTEN FOR PROGRESS (Update Bar)
     const unlistenProgress = await listen<ProgressEvent>(
@@ -48,9 +60,7 @@ export function useTransfer() {
       (event) => {
         const { transferred, total, filename } = event.payload;
         setCurrentFile(filename);
-        if (total > 0) {
-          setProgress(Math.round((transferred / total) * 100));
-        }
+        if (total > 0) setProgress(Math.round((transferred / total) * 100));
       }
     );
 
@@ -69,6 +79,12 @@ export function useTransfer() {
       const filesToTransfer = fileList.filter((f) => checkedFiles.has(f.name));
 
       for (const file of filesToTransfer) {
+        // 🛑 LOOP CHECK: Did user hit stop?
+        if (abortRef.current) {
+          console.log("🛑 Loop Terminated by User");
+          break;
+        }
+
         if (file.isDirectory) continue;
 
         // Skip if already verified (Optimization)
@@ -80,46 +96,52 @@ export function useTransfer() {
         const fullSource = `${sourcePath}${srcSeparator}${file.name}`;
         const fullDest = `${destPath}${destSeparator}${file.name}`;
 
-        // RUN TRANSFER (Rust will emit 'transfer-verifying' halfway through)
-        await invoke("copy_file", { source: fullSource, dest: fullDest });
+        try {
+          // RUN TRANSFER
+          await invoke("copy_file", { source: fullSource, dest: fullDest });
 
-        // TRANSFER COMPLETE
-        // 1. Remove "Verifying" status (Yellow off)
-        removeVerifyingFile(file.name);
-
-        // 2. Mark as Present (Green Dot)
-        const currentDestFiles = new Set(useAppStore.getState().destFiles);
-        currentDestFiles.add(file.name);
-        setDestFiles(currentDestFiles);
-
-        // 3. Mark as Verified (Shield Icon)
-        addVerifiedFile(file.name);
+          // SUCCESS HANDLERS
+          removeVerifyingFile(file.name);
+          const currentDestFiles = new Set(useAppStore.getState().destFiles);
+          currentDestFiles.add(file.name);
+          setDestFiles(currentDestFiles);
+          addVerifiedFile(file.name);
+        } catch (err: any) {
+          // IF CANCELLED, STOP EVERYTHING
+          if (err.toString().includes("CANCELLED")) {
+            console.warn("Transfer Cancelled: ", file.name);
+            removeVerifyingFile(file.name);
+            break; // Break the for-loop
+          }
+          console.error("Transfer Error:", err);
+          removeVerifyingFile(file.name);
+        }
       }
-
-      console.log("Batch Transfer Complete!");
     } catch (err) {
-      console.error("Transfer Error:", err);
-      // Safety: If error, remove verifying status so it doesn't get stuck on Yellow
-      // We can iterate checked files to be safe, or just clear the specific one if we tracked it
-      useAppStore
-        .getState()
-        .fileList.forEach((f) => removeVerifyingFile(f.name));
+      console.error("Batch Error:", err);
     } finally {
       // Clean up listeners
       unlistenProgress();
       unlistenVerifying();
-
       setIsTransferring(false);
-      setProgress(100);
-      setTimeout(() => {
-        setCurrentFile("");
+
+      if (!abortRef.current) {
+        setProgress(100);
+        setTimeout(() => {
+          setCurrentFile("");
+          setProgress(0);
+        }, 2000);
+      } else {
+        // If cancelled, reset immediately
+        setCurrentFile("Stopped");
         setProgress(0);
-      }, 2000);
+      }
     }
   }
 
   return {
     startTransfer,
+    cancelTransfer, // <--- Export this
     isTransferring,
     currentFile,
     progress,

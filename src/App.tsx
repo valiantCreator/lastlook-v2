@@ -28,8 +28,15 @@ function App() {
     clearSource,
     unmountDest,
   } = useFileSystem();
-  const { startTransfer, isTransferring, currentFile, progress } =
-    useTransfer();
+
+  // Destructure cancelTransfer
+  const {
+    startTransfer,
+    cancelTransfer,
+    isTransferring,
+    currentFile,
+    progress,
+  } = useTransfer();
 
   // 1. INITIAL SETUP
   useEffect(() => {
@@ -136,36 +143,50 @@ function App() {
         {/* Footer Actions */}
         <div className="h-20 border-t border-zinc-800 flex flex-col items-center justify-center bg-zinc-900/20 px-4 shrink-0">
           {isTransferring ? (
-            <div className="w-full max-w-xs space-y-2">
-              <div className="flex justify-between text-[10px] font-mono uppercase">
-                <span
-                  className={`truncate max-w-[150px] ${
-                    isVerifying ? "text-yellow-400 font-bold" : "text-zinc-400"
-                  }`}
-                >
-                  {currentFile}
-                </span>
-                <span
-                  className={isVerifying ? "text-yellow-400" : "text-zinc-400"}
-                >
-                  {progress}%
-                </span>
-              </div>
+            <div className="w-full flex items-center gap-4">
+              {/* STOP BUTTON */}
+              <button
+                onClick={cancelTransfer}
+                className="w-12 h-12 rounded-full bg-zinc-800 hover:bg-red-900/50 border border-zinc-700 hover:border-red-500 flex items-center justify-center transition-all group shadow-lg active:scale-95"
+                title="Cancel Transfer"
+              >
+                <div className="w-4 h-4 bg-red-500 rounded-sm group-hover:scale-110 transition-transform shadow-[0_0_10px_rgba(239,68,68,0.5)]" />
+              </button>
 
-              {/* PROGRESS BAR TRACK */}
-              <div className="h-2 w-full bg-zinc-800 rounded-full overflow-hidden relative">
-                {/* PROGRESS BAR FILL */}
-                <div
-                  className={`
-                       h-full transition-all duration-300 ease-out
-                       ${
-                         isVerifying
-                           ? "bg-yellow-500 progress-stripe" // <--- AMBER MODE
-                           : "bg-emerald-500" // <--- NORMAL MODE
-                       }
-                     `}
-                  style={{ width: `${progress}%` }}
-                />
+              {/* PROGRESS BAR */}
+              <div className="flex-1 space-y-2">
+                <div className="flex justify-between text-[10px] font-mono uppercase">
+                  <span
+                    className={`truncate max-w-[200px] ${
+                      isVerifying
+                        ? "text-yellow-400 font-bold"
+                        : "text-zinc-400"
+                    }`}
+                  >
+                    {currentFile}
+                  </span>
+                  <span
+                    className={
+                      isVerifying ? "text-yellow-400" : "text-zinc-400"
+                    }
+                  >
+                    {progress}%
+                  </span>
+                </div>
+
+                <div className="h-2 w-full bg-zinc-800 rounded-full overflow-hidden relative">
+                  <div
+                    className={`
+                         h-full transition-all duration-300 ease-out
+                         ${
+                           isVerifying
+                             ? "bg-yellow-500 progress-stripe"
+                             : "bg-emerald-500"
+                         }
+                       `}
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
               </div>
             </div>
           ) : (

@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { DirEntry } from "@tauri-apps/plugin-fs";
 import { useAppStore } from "../store/appStore";
 import { FileRow } from "./FileRow";
@@ -25,8 +26,17 @@ export function FileList({
     checkedFiles,
     toggleChecked,
     checkAllMissing,
-    destPath, // <--- NEW: GRAB DEST PATH
+    destPath,
   } = useAppStore();
+
+  // SCROLL REF LOGIC
+  const activeRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (activeRef.current) {
+      activeRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [selectedFile]);
 
   // 1. EMPTY STATE: NO SOURCE SELECTED
   if (!sourcePath) {
@@ -65,11 +75,12 @@ export function FileList({
         {files.map((file) => (
           <FileRow
             key={file.name}
+            ref={selectedFile?.name === file.name ? activeRef : null} // <--- PASS REF IF SELECTED
             file={file}
             isSynced={destFiles.has(file.name)}
             isVerified={verifiedFiles.has(file.name)}
             isVerifying={verifyingFiles.has(file.name)}
-            hasDest={!!destPath} // <--- PASS THE BOOLEAN
+            hasDest={!!destPath}
             isSelected={selectedFile?.name === file.name}
             isChecked={checkedFiles.has(file.name)}
             onSelect={() => setSelectedFile(file)}
@@ -82,7 +93,7 @@ export function FileList({
       <div className="p-3 bg-zinc-900 border-t border-zinc-800 flex justify-between items-center shrink-0">
         <button
           onClick={checkAllMissing}
-          disabled={!destPath} // Optional: Disable "Select Missing" if no dest
+          disabled={!destPath}
           className={`text-[10px] px-3 py-1.5 rounded border transition-colors cursor-pointer
               ${
                 !destPath
