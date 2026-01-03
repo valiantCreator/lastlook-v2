@@ -149,8 +149,44 @@ _The Rust Core._
 - [x] **Error Handling:** Graceful failure/reporting for permissions.
 - [x] **Security:** Enable `fs:allow-stat` capability.
 
-### 🔮 Phase 4: Rust Backend (The Engine)
+### ✅ Phase 4: Rust Backend (The Engine) (Completed)
 
-- [x] **Custom Commands:** Create `src-tauri/src/lib.rs` functions accessible from React.
-- [x] **MD5 Hashing:** Multithreaded file verification (CPU-intensive task moved to Rust).
-- [ ] **Transfer Loop:** The actual copy process (with buffer control and progress updates).
+- [x] **Custom Commands:** Create `src-tauri/src/lib.rs` functions.
+- [x] **MD5 Hashing:** Multithreaded file verification.
+- [x] **Transfer Loop:** The copy process with progress events.
+- [x] **Real-Time UI:** `useTransfer` hook updates the Traffic Lights instantly.
+
+### 🔮 Phase 5: Verification & Polish (The Final Layer)
+
+- [x] **xxHash/MD5 Integration:** Hashing occurs _during_ the transfer stream.
+- [x] **Verification Logic:** Compare Source Hash vs. Dest Hash.
+- [x] **UI Cleanup:** Remove debug buttons.
+- [x] **Verified Badge:** Show a Shield icon for confirmed transfers.
+
+### 🚧 Phase 6: The Batch Commander (Current Focus)
+
+_Goal: Restore v1 Parity for Selection & Stats._
+
+- [ ] **Checkbox System:** Add multi-select checkboxes to `FileRow`.
+- [ ] **Batch Store:** Update `appStore` to track a Set of `selectedFileIds`.
+- [ ] **Smart Select:** "Select All Missing" button.
+- [ ] **Batch Stats:** Calculate "Total Size" of selected files in Inspector.
+- [ ] **Synced Highlight:** Clicking a file highlights it in both Source & Dest lists.
+- [ ] **Cleanup:** Remove the debug "Generate Hash" button.
+
+### 🔮 Phase 7: The Controller
+
+_Goal: Advanced Flow Control._
+
+- [ ] **Cancel/Pause Logic:** Rust `Receiver` channel to interrupt the loop.
+- [ ] **Job Modal:** Persistent progress bar (bottom of screen) independent of selection.
+- [ ] **Overwrite Protection:** Prompt user before stomping existing files.
+
+### 🔮 Phase 8: The Visualizer
+
+_Goal: Media features powered by FFmpeg._
+
+- [ ] **Sidecar Binary:** Bundle `ffmpeg.exe` with the app.
+- [ ] **Thumbnailer:** Generate 00:01 frame previews in the Inspector.
+- [ ] **Metadata:** Use `ffprobe` for Resolution/Codec info.
+- [ ] **Comparators:** Side-by-side view of Source vs. Dest.

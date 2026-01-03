@@ -40,8 +40,8 @@ export function useTransfer() {
       for (const file of fileList) {
         if (file.isDirectory) continue;
 
-        // Skip if already synced (Optional optimization)
-        if (destFiles.has(file.name)) continue;
+        // Skip if already VERIFIED (Strict check)
+        if (useAppStore.getState().verifiedFiles.has(file.name)) continue;
 
         const srcSeparator = sourcePath.endsWith("\\") ? "" : "\\";
         const destSeparator = destPath.endsWith("\\") ? "" : "\\";
@@ -49,20 +49,24 @@ export function useTransfer() {
         const fullSource = `${sourcePath}${srcSeparator}${file.name}`;
         const fullDest = `${destPath}${destSeparator}${file.name}`;
 
-        // RUN TRANSFER
+        // RUN TRANSFER & VERIFY
+        // Now wait for the Result (which is the Hash String)
         await invoke("copy_file", { source: fullSource, dest: fullDest });
 
-        // ✨ INSTANT UI UPDATE ✨
-        // We create a new Set based on the old one, add the new file, and save it.
-        // This triggers React to re-render the FileList immediately.
-        const newSet = new Set(useAppStore.getState().destFiles);
-        newSet.add(file.name);
-        setDestFiles(newSet);
+        // ✨ UPDATE STATE ✨
+        // 1. Mark as Present (Green Dot)
+        const currentDestFiles = new Set(useAppStore.getState().destFiles);
+        currentDestFiles.add(file.name);
+        setDestFiles(currentDestFiles);
+
+        // 2. Mark as Verified (Shield Icon)
+        useAppStore.getState().addVerifiedFile(file.name);
       }
 
-      console.log("Transfer Complete!");
+      console.log("Transfer & Verification Complete!");
     } catch (err) {
       console.error("Transfer Error:", err);
+      // In a real app, we would show a toast notification here
     } finally {
       unlisten();
       setIsTransferring(false);

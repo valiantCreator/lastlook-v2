@@ -1,5 +1,5 @@
 import { DirEntry } from "@tauri-apps/plugin-fs";
-import { useAppStore } from "../store/appStore"; // <--- Import Store
+import { useAppStore } from "../store/appStore";
 import { FileRow } from "./FileRow";
 
 interface FileListProps {
@@ -17,7 +17,8 @@ export function FileList({
   onSelectSource,
   onClearSource,
 }: FileListProps) {
-  const { selectedFile, setSelectedFile } = useAppStore(); // <--- Get Selection State
+  // We now grab 'verifiedFiles' from the store
+  const { selectedFile, setSelectedFile, verifiedFiles } = useAppStore();
 
   if (!sourcePath) {
     return (
@@ -56,8 +57,9 @@ export function FileList({
           key={file.name}
           file={file}
           isSynced={destFiles.has(file.name)}
-          isSelected={selectedFile?.name === file.name} // <--- Check Match
-          onSelect={() => setSelectedFile(file)} // <--- Set State
+          isVerified={verifiedFiles.has(file.name)} // <--- Pass the new prop
+          isSelected={selectedFile?.name === file.name}
+          onSelect={() => setSelectedFile(file)}
         />
       ))}
 
