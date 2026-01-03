@@ -21,10 +21,11 @@ export function FileList({
     selectedFile,
     setSelectedFile,
     verifiedFiles,
-    verifyingFiles, // <--- GRAB THIS FROM STORE
+    verifyingFiles,
     checkedFiles,
     toggleChecked,
     checkAllMissing,
+    destPath, // <--- NEW: GRAB DEST PATH
   } = useAppStore();
 
   // 1. EMPTY STATE: NO SOURCE SELECTED
@@ -67,7 +68,8 @@ export function FileList({
             file={file}
             isSynced={destFiles.has(file.name)}
             isVerified={verifiedFiles.has(file.name)}
-            isVerifying={verifyingFiles.has(file.name)} // <--- PASS IT DOWN
+            isVerifying={verifyingFiles.has(file.name)}
+            hasDest={!!destPath} // <--- PASS THE BOOLEAN
             isSelected={selectedFile?.name === file.name}
             isChecked={checkedFiles.has(file.name)}
             onSelect={() => setSelectedFile(file)}
@@ -80,7 +82,14 @@ export function FileList({
       <div className="p-3 bg-zinc-900 border-t border-zinc-800 flex justify-between items-center shrink-0">
         <button
           onClick={checkAllMissing}
-          className="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-3 py-1.5 rounded border border-zinc-700 transition-colors cursor-pointer"
+          disabled={!destPath} // Optional: Disable "Select Missing" if no dest
+          className={`text-[10px] px-3 py-1.5 rounded border transition-colors cursor-pointer
+              ${
+                !destPath
+                  ? "bg-zinc-800/50 text-zinc-600 border-zinc-800 cursor-not-allowed"
+                  : "bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border-zinc-700"
+              }
+            `}
         >
           Select All Missing Files
         </button>

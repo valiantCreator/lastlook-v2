@@ -5,6 +5,7 @@ interface FileRowProps {
   isSynced: boolean;
   isVerified: boolean;
   isVerifying: boolean;
+  hasDest: boolean; // <--- NEW PROP
   isSelected: boolean;
   isChecked: boolean;
   onSelect: () => void;
@@ -16,13 +17,14 @@ export function FileRow({
   isSynced,
   isVerified,
   isVerifying,
+  hasDest, // <--- Destructure
   isSelected,
   isChecked,
   onSelect,
   onCheck,
 }: FileRowProps) {
   // DYNAMIC ROW STYLING
-  let rowStyle = "border-transparent hover:bg-zinc-800/50"; // Default
+  let rowStyle = "border-transparent hover:bg-zinc-800/50";
 
   if (isSelected) {
     rowStyle = "bg-zinc-800 border-zinc-700 shadow-md";
@@ -77,6 +79,7 @@ export function FileRow({
       )}
 
       {/* TRAFFIC LIGHT DOT */}
+      {/* PRIORITY: Verifying -> Directory -> Synced -> Missing (Red) OR Neutral (Grey) */}
       <div
         className={`w-2 h-2 rounded-full shadow-[0_0_8px_rgba(0,0,0,0.5)] transition-all duration-300
           ${
@@ -86,7 +89,9 @@ export function FileRow({
               ? "bg-blue-500 shadow-blue-900/50"
               : isSynced
               ? "bg-emerald-500 shadow-emerald-500/50"
-              : "bg-red-500/50 shadow-red-900/20"
+              : hasDest
+              ? "bg-red-500/50 shadow-red-900/20" // Has Dest = Show Missing (Red)
+              : "bg-zinc-600 shadow-zinc-900/50" // No Dest = Neutral (Grey)
           }
           ${isSelected ? "scale-125" : ""} 
         `}
@@ -139,15 +144,19 @@ export function FileRow({
            }
         `}
         >
-          {file.isDirectory
-            ? "Folder"
-            : isVerifying
-            ? "Verifying Integrity..."
-            : isVerified
-            ? "Verified MD5 Match"
-            : isSynced
-            ? "Synced (Unverified)"
-            : "Missing from Dest"}
+          {
+            file.isDirectory
+              ? "Folder"
+              : isVerifying
+              ? "Verifying Integrity..."
+              : isVerified
+              ? "Verified MD5 Match"
+              : isSynced
+              ? "Synced (Unverified)"
+              : hasDest
+              ? "Missing from Dest"
+              : "Waiting for Destination..." // Neutral Text
+          }
         </p>
       </div>
     </div>

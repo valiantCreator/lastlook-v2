@@ -3,12 +3,12 @@ import { DirEntry } from "@tauri-apps/plugin-fs";
 import { useAppStore } from "../store/appStore";
 
 interface DestFileListProps {
-  files: Set<string>; // We only know filenames in Dest (Green Dots)
+  files: Set<string>;
 }
 
 export function DestFileList({ files }: DestFileListProps) {
-  const { selectedFile, setSelectedFile } = useAppStore();
-  const sortedFiles = Array.from(files).sort(); // Simple A-Z sort
+  const { selectedFile, setSelectedFile, sourcePath } = useAppStore(); // <--- Added sourcePath
+  const sortedFiles = Array.from(files).sort();
 
   // Refs for auto-scrolling
   const activeRef = useRef<HTMLDivElement>(null);
@@ -55,8 +55,16 @@ export function DestFileList({ files }: DestFileListProps) {
                }
              `}
           >
-            {/* Simple Dot (Always Green if it's in this list) */}
-            <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-emerald-500/50" />
+            {/* CONDITIONAL DOT COLOR */}
+            <div
+              className={`w-2 h-2 rounded-full shadow-sm
+               ${
+                 sourcePath
+                   ? "bg-emerald-500 shadow-emerald-500/50" // Source Exists = Green (Synced)
+                   : "bg-zinc-600 shadow-zinc-900/50" // No Source = Grey (Neutral)
+               }
+             `}
+            />
 
             <p
               className={`text-xs truncate font-medium ${
