@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { stat } from "@tauri-apps/plugin-fs";
+import { invoke } from "@tauri-apps/api/core"; // <--- Bridge to Rust
 import { useAppStore } from "../store/appStore";
 
 // FAIL-SAFE TYPE
@@ -7,35 +8,61 @@ type FileStat = Awaited<ReturnType<typeof stat>>;
 
 export function Inspector() {
   const { selectedFile, sourcePath } = useAppStore();
+
+  // STATE
   const [meta, setMeta] = useState<FileStat | null>(null);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null); // <--- NEW: Error State
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // NEW: Hashing State
+  const [hash, setHash] = useState<string | null>(null);
+  const [isHashing, setIsHashing] = useState(false);
 
   // EFFECT: Fetch details when selection changes
   useEffect(() => {
     async function fetchMeta() {
       if (!selectedFile || !sourcePath) return;
 
-      // Reset states
+      // Reset all states when changing file
       setMeta(null);
       setErrorMsg(null);
+      setHash(null);
+      setIsHashing(false);
 
       try {
-        // MANUAL JOIN (Debug Version)
-        // Ensure we handle both slash types to be safe
-        const cleanSource = sourcePath.replace(/\/$/, "").replace(/\\$/, "");
-        const fullPath = `${cleanSource}\\${selectedFile.name}`;
+        // MANUAL JOIN (Windows Workaround)
+        const separator = sourcePath.endsWith("\\") ? "" : "\\";
+        const fullPath = `${sourcePath}${separator}${selectedFile.name}`;
 
-        console.log("Attempting to stat:", fullPath); // Will show in DevTools
-
+        // Fetch Stats
         const data = await stat(fullPath);
         setMeta(data);
       } catch (err) {
         console.error("Failed to get stats:", err);
-        setErrorMsg(String(err)); // <--- Capture the error
+        setErrorMsg(String(err));
       }
     }
     fetchMeta();
   }, [selectedFile, sourcePath]);
+
+  // ACTION: Call Rust to Calculate Hash
+  async function handleHash() {
+    if (!selectedFile || !sourcePath) return;
+
+    setIsHashing(true);
+    try {
+      const separator = sourcePath.endsWith("\\") ? "" : "\\";
+      const fullPath = `${sourcePath}${separator}${selectedFile.name}`;
+
+      // CALL RUST COMMAND 🦀
+      const result = await invoke<string>("calculate_hash", { path: fullPath });
+      setHash(result);
+    } catch (err) {
+      console.error("Hashing failed:", err);
+      setErrorMsg("Hash Calculation Failed");
+    } finally {
+      setIsHashing(false);
+    }
+  }
 
   // HELPER: Format Bytes
   function formatSize(bytes: number) {
@@ -101,7 +128,7 @@ export function Inspector() {
           </span>
         </div>
 
-        {/* ERROR DISPLAY (If something goes wrong) */}
+        {/* ERROR DISPLAY */}
         {errorMsg && (
           <div className="p-2 bg-red-900/20 border border-red-500/50 rounded">
             <p className="text-[10px] text-red-400 font-mono break-all">
@@ -110,7 +137,7 @@ export function Inspector() {
           </div>
         )}
 
-        {/* METADATA DISPLAY (If successful) */}
+        {/* METADATA DISPLAY */}
         {meta && (
           <div className="grid grid-cols-2 gap-4 pt-4 border-t border-zinc-800">
             <div>
@@ -129,6 +156,30 @@ export function Inspector() {
                 {formatDate(meta.mtime)}
               </p>
             </div>
+          </div>
+        )}
+
+        {/* HASH SECTION (Only for files) */}
+        {!selectedFile.isDirectory && (
+          <div className="pt-4 border-t border-zinc-800">
+            {!hash ? (
+              <button
+                onClick={handleHash}
+                disabled={isHashing}
+                className="w-full bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs py-2 rounded transition-colors disabled:opacity-50 cursor-pointer border border-zinc-700"
+              >
+                {isHashing ? "Calculating..." : "Generate MD5 Hash"}
+              </button>
+            ) : (
+              <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                <p className="text-[10px] text-zinc-500 uppercase tracking-wider font-bold">
+                  MD5 Hash
+                </p>
+                <p className="text-[10px] text-emerald-400 font-mono break-all mt-1 bg-zinc-900/50 p-2 rounded border border-emerald-500/20 select-all cursor-text shadow-inner">
+                  {hash}
+                </p>
+              </div>
+            )}
           </div>
         )}
       </div>

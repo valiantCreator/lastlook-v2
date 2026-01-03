@@ -1,4 +1,6 @@
 import { Inspector } from "./components/Inspector";
+import { useEffect } from "react"; // <--- ADD THIS
+import { invoke } from "@tauri-apps/api/core"; // <--- Ensure this is here too
 import { FileList } from "./components/FileList";
 import { useAppStore } from "./store/appStore";
 import { useFileSystem } from "./hooks/useFileSystem";
@@ -17,6 +19,22 @@ function App() {
 
   // 2. LOGIC (From Hook)
   const { selectSource, selectDest } = useFileSystem();
+
+  // TEST BRIDGE ON MOUNT
+  useEffect(() => {
+    async function testBridge() {
+      try {
+        // 'verify_connection' must match the function name in Rust
+        const response = await invoke("verify_connection", {
+          name: "LastLook UI",
+        });
+        console.log("✅ BACKEND SAYS:", response);
+      } catch (error) {
+        console.error("❌ BRIDGE FAILED:", error);
+      }
+    }
+    testBridge();
+  }, []);
 
   return (
     <div className="h-screen w-screen bg-zinc-950 text-zinc-300 flex overflow-hidden font-sans select-none">

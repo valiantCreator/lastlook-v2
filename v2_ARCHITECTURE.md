@@ -1,6 +1,6 @@
 # LastLook v2.0: Architecture & Technical Specs
 
-**Status:** Alpha (Skeleton & Refactor Complete)
+**Status:** Alpha (Inspector Functional)
 **Stack:** Tauri (Rust) + React (TypeScript) + Tailwind CSS + Zustand
 **Date:** January 2, 2026
 
@@ -49,7 +49,7 @@ _The React Frontend logic._
   - **Dependencies:** `react-dom/client`, `App.tsx`
 - **`App.tsx`**
   - **Purpose:** The main layout container (Source/Dest/Inspector Grid). It composes the UI but contains **no logic**.
-  - **Dependencies:** `FileList.tsx`, `useFileSystem`, `appStore`
+  - **Dependencies:** `FileList.tsx`, `Inspector.tsx`, `useFileSystem`, `appStore`
 - **`App.css`**
   - **Purpose:** Entry point for Tailwind directives (`@import "tailwindcss"`).
   - **Dependencies:** Tailwind
@@ -60,10 +60,13 @@ _Pure UI elements (Presentation Layer)._
 
 - **`FileList.tsx`**
   - **Purpose:** Renders the scrollable list of files OR the "Select Source" empty state.
-  - **Dependencies:** `FileRow.tsx`, `DirEntry` (type)
+  - **Dependencies:** `FileRow.tsx`, `DirEntry` (type), `appStore`
 - **`FileRow.tsx`**
-  - **Purpose:** Renders a single file row. Contains the "Traffic Light" logic (Green/Red dot).
+  - **Purpose:** Renders a single file row. Contains the "Traffic Light" logic (Green/Red dot) and click handlers.
   - **Dependencies:** `DirEntry` (type)
+- **`Inspector.tsx`**
+  - **Purpose:** Displays metadata (Size, Date, Preview) for the currently selected file. Handles `fs.stat` calls and error reporting.
+  - **Dependencies:** `appStore`, `@tauri-apps/plugin-fs`
 
 #### Hooks (`src/hooks/`)
 
@@ -78,7 +81,7 @@ _Reusable Logic Layer._
 _Global State Management._
 
 - **`appStore.ts`**
-  - **Purpose:** The Single Source of Truth. Holds `sourcePath`, `destPath`, and the `fileList`.
+  - **Purpose:** The Single Source of Truth. Holds `sourcePath`, `destPath`, `fileList`, and `selectedFile`.
   - **Dependencies:** `zustand`
 
 ### 2.3 Backend (`src-tauri/`)
@@ -88,7 +91,11 @@ _The Rust Core._
 - **`tauri.conf.json`**
   - **Purpose:** Configures window size, permissions, and bundle identifiers (`com.lastlook.app`).
 - **`capabilities/default.json`**
-  - **Purpose:** Security rules. Explicitly allows the app to access `fs` (File System) and `dialog`.
+  - **Purpose:** Security rules defining what the frontend is allowed to do.
+  - **Permissions:**
+    - `fs:default` (Read/Write files)
+    - `fs:allow-stat` (Read Metadata like Size/Date)
+    - `dialog:default` (Open System Pickers)
 - **`src/main.rs`**
   - **Purpose:** The Rust entry point. Spins up the WebView.
 - **`src/lib.rs`**
@@ -104,6 +111,7 @@ _The Rust Core._
 4.  **Backend:** Rust opens Windows native picker.
 5.  **State:** Path is saved to `appStore`.
 6.  **Reaction:** `FileList` component re-renders because it subscribes to `appStore`.
+7.  **Interaction:** User clicks a file -> `selectedFile` updates -> `Inspector` fetches metadata via `fs.stat`.
 
 ---
 
@@ -134,13 +142,15 @@ _The Rust Core._
 - [x] **Traffic Light:** "Call and Response" comparison logic.
 - [x] **Refactor:** Break `App.tsx` into Components, Hooks, and Store.
 
-### 🔮 Phase 3: The Inspector (Next)
+### ✅ Phase 3: The Inspector (Completed)
 
-- [ ] **Selection State:** Track which file is clicked.
-- [ ] **Metadata Display:** Show File Size and Date in the right panel.
-- [ ] **Thumbnail Placeholder:** Prepare UI for future FFmpeg integration.
+- [x] **Selection State:** Track which file is clicked.
+- [x] **Metadata Display:** Show File Size and Date in the right panel.
+- [x] **Error Handling:** Graceful failure/reporting for permissions.
+- [x] **Security:** Enable `fs:allow-stat` capability.
 
-### 🔮 Phase 4: Rust Backend (Heavy Lifting)
+### 🔮 Phase 4: Rust Backend (The Engine)
 
-- [ ] **MD5 Hashing:** Move hashing to a threaded Rust command.
-- [ ] **Transfer Engine:** Implement the copy loop in Rust.
+- [ ] **Custom Commands:** Create `src-tauri/src/lib.rs` functions accessible from React.
+- [ ] **MD5 Hashing:** Multithreaded file verification (CPU-intensive task moved to Rust).
+- [ ] **Transfer Loop:** The actual copy process (with buffer control and progress updates).
