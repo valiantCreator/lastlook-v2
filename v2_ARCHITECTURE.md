@@ -1,6 +1,6 @@
 # LastLook v2.0: Architecture & Technical Specs
 
-**Status:** Beta (Async Verification Active)
+**Status:** Beta (Safety & Async Logic Active)
 **Stack:** Tauri (Rust) + React (TypeScript) + Tailwind CSS + Zustand
 **Date:** January 3, 2026
 
@@ -70,6 +70,9 @@ _Pure UI elements (Presentation Layer)._
 - **`Inspector.tsx`**
   - **Purpose:** Displays metadata (Size, Date, Preview) for the currently selected file. Handles `fs.stat` calls and batch size calculations.
   - **Dependencies:** `appStore`, `@tauri-apps/plugin-fs`
+- **`ConflictModal.tsx`**
+  - **Purpose:** A modal dialog that appears when source files already exist in the destination. Offers options to "Overwrite All", "Skip Existing", or "Cancel".
+  - **Dependencies:** None (Pure UI)
 
 #### Hooks (`src/hooks/`)
 
@@ -79,7 +82,7 @@ _Reusable Logic Layer._
   - **Purpose:** The Bridge between React and Tauri. Handles opening dialogs, scanning folders, and mounting destinations.
   - **Dependencies:** `@tauri-apps/plugin-dialog`, `@tauri-apps/plugin-fs`, `appStore`
 - **`useTransfer.ts`**
-  - **Purpose:** The Controller. Manages the transfer loop, listens for Rust events (`transfer-progress`, `transfer-verifying`), handles Cancellation logic, and enforces batch selection rules.
+  - **Purpose:** The Controller. Manages the transfer loop, listens for Rust events (`transfer-progress`, `transfer-verifying`), handles Cancellation logic, performs Pre-Flight Conflict Checks, and enforces batch selection rules.
   - **Dependencies:** `appStore`, `@tauri-apps/api/core`
 
 #### Store (`src/store/`)
@@ -87,7 +90,7 @@ _Reusable Logic Layer._
 _Global State Management._
 
 - **`appStore.ts`**
-  - **Purpose:** The Single Source of Truth. Holds `sourcePath`, `destPath`, `fileList`, `destFiles`, `verifiedFiles`, `verifyingFiles` (Amber State), `checkedFiles` (Batch), and `selectedFile`.
+  - **Purpose:** The Single Source of Truth. Holds `sourcePath`, `destPath`, `fileList`, `destFiles`, `verifiedFiles`, `verifyingFiles` (Amber State), `checkedFiles` (Batch), `conflicts` (Safety), and `selectedFile`.
   - **Dependencies:** `zustand`
 
 ### 2.3 Backend (`src-tauri/`)
@@ -107,7 +110,7 @@ _The Rust Core._
 - **`src/lib.rs`**
   - **Purpose:** The Engine. Contains:
     - `calculate_hash`: High-performance xxHash (xxh3) check using 64MB buffers.
-    - `copy_file`: Pipelined Transfer + Verification loop. Emits `transfer-verifying` event between phases.
+    - `copy_file`: Pipelined Transfer + Verification loop. Emits `transfer-verifying` event between phases. Resets abort flag on start.
     - `cancel_transfer`: Sets atomic flag to interrupt active transfers.
 
 ---
@@ -120,10 +123,13 @@ _The Rust Core._
 4.  **Backend:** Rust opens Windows native picker.
 5.  **State:** Path is saved to `appStore`.
 6.  **Reaction:** `FileList` component re-renders. Dots appear **Grey** (Neutral) until Dest is selected.
-7.  **Action:** User starts Transfer.
-8.  **Event:** Rust emits `transfer-progress` -> UI updates Blue/Green bar.
-9.  **Event:** Rust emits `transfer-verifying` -> UI updates to **Yellow** bar/dot.
-10. **Completion:** Verification passes -> UI updates to **Green** dot + Shield.
+7.  **Action:** User clicks "Transfer".
+8.  **Logic:** `useTransfer` performs **Pre-Flight Check**.
+    - _Conflict:_ `ConflictModal` opens. User selects "Overwrite" or "Skip".
+    - _No Conflict:_ Transfer begins.
+9.  **Event:** Rust emits `transfer-progress` -> UI updates Blue/Green bar.
+10. **Event:** Rust emits `transfer-verifying` -> UI updates to **Yellow** bar/dot.
+11. **Completion:** Verification passes -> UI updates to **Green** dot + Shield.
 
 ---
 
@@ -196,8 +202,8 @@ _Goal: Performance Optimization & Flow Control._
 - [x] **Async Verification:** Decouple verification from transfer loop using `transfer-verifying` event.
 - [x] **Amber UI:** "Yellow Dot" and Striped Progress Bar for "Verifying" state.
 - [x] **Cancel/Pause Logic:** Implement a Rust `Receiver` channel (using `AtomicBool`) to interrupt the loop when the user clicks Stop.
+- [x] **Overwrite Protection:** Add a pre-flight check to warn the user before overwriting existing files in the Destination.
 - [ ] **Job Modal:** A persistent status bar (or modal) that displays progress even if the user navigates away or changes selection.
-- [ ] **Overwrite Protection:** Add a pre-flight check to warn the user before overwriting existing files in the Destination.
 
 ### 🔮 Phase 8: The Visualizer
 

@@ -12,8 +12,14 @@ interface AppState {
   selectedFile: DirEntry | null;
   checkedFiles: Set<string>;
 
-  // NEW: CONFLICT STATE
-  conflicts: string[]; // List of filenames causing conflict
+  // CONFLICT STATE
+  conflicts: string[];
+
+  // --- NEW: JOB DRAWER STATE ---
+  isDrawerOpen: boolean;
+  batchTotalBytes: number; // The size of the ENTIRE job (50GB)
+  completedBytes: number; // Bytes fully finished (files 1-4 done)
+  transferStartTime: number | null; // Timestamp when job started
 
   // ACTIONS
   setSourcePath: (path: string | null) => void;
@@ -26,8 +32,6 @@ interface AppState {
   addVerifiedFile: (filename: string) => void;
 
   setSelectedFile: (file: DirEntry | null) => void;
-
-  // NEW ACTION
   setConflicts: (files: string[]) => void;
 
   // CHECKBOX ACTIONS
@@ -36,6 +40,12 @@ interface AppState {
   setAllChecked: (filenames: string[]) => void;
   clearChecked: () => void;
   resetSource: () => void;
+
+  // --- NEW: DRAWER ACTIONS ---
+  toggleDrawer: (isOpen: boolean) => void;
+  setBatchInfo: (totalBytes: number) => void;
+  addCompletedBytes: (bytes: number) => void; // Call this when a file finishes
+  setTransferStartTime: (time: number | null) => void;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -47,8 +57,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   verifyingFiles: new Set(),
   selectedFile: null,
   checkedFiles: new Set(),
+  conflicts: [],
 
-  conflicts: [], // Default empty
+  // Drawer Defaults
+  isDrawerOpen: false,
+  batchTotalBytes: 0,
+  completedBytes: 0,
+  transferStartTime: null,
 
   // Actions
   setSourcePath: (path) => set({ sourcePath: path }),
@@ -78,8 +93,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     }),
 
   setSelectedFile: (file) => set({ selectedFile: file }),
-
-  // NEW: SET CONFLICTS
   setConflicts: (files) => set({ conflicts: files }),
 
   // --- BATCH LOGIC ---
@@ -92,7 +105,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       return { checkedFiles: newSet };
     }),
 
-  // Checks ONLY files that are NOT in the destination (Red dots)
   checkAllMissing: () => {
     const { fileList, destFiles } = get();
     const missing = fileList
@@ -104,6 +116,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   setAllChecked: (filenames) => set({ checkedFiles: new Set(filenames) }),
   clearChecked: () => set({ checkedFiles: new Set() }),
 
+  // --- DRAWER LOGIC ---
+  toggleDrawer: (isOpen) => set({ isDrawerOpen: isOpen }),
+  setBatchInfo: (totalBytes) =>
+    set({ batchTotalBytes: totalBytes, completedBytes: 0 }),
+  addCompletedBytes: (bytes) =>
+    set((state) => ({ completedBytes: state.completedBytes + bytes })),
+  setTransferStartTime: (time) => set({ transferStartTime: time }),
+
   resetSource: () =>
     set({
       sourcePath: null,
@@ -112,6 +132,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       verifiedFiles: new Set(),
       verifyingFiles: new Set(),
       checkedFiles: new Set(),
-      conflicts: [], // Reset conflicts
+      conflicts: [],
+      // Reset Drawer State too
+      batchTotalBytes: 0,
+      completedBytes: 0,
+      transferStartTime: null,
+      isDrawerOpen: false,
     }),
 }));

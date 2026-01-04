@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { stat } from "@tauri-apps/plugin-fs";
 import { useAppStore } from "../store/appStore";
 
 interface ProgressEvent {
@@ -24,14 +25,23 @@ export function useTransfer() {
     addVerifyingFile,
     removeVerifyingFile,
     checkedFiles,
-    setConflicts, // <--- NEW
+    verifiedFiles,
+    destFiles,
+    setConflicts,
+    // --- NEW STORE ACTIONS ---
+    setBatchInfo,
+    addCompletedBytes,
+    setTransferStartTime,
   } = useAppStore();
 
   const [isTransferring, setIsTransferring] = useState(false);
   const [currentFile, setCurrentFile] = useState<string>("");
   const [progress, setProgress] = useState(0);
 
-  // ABORT REF: Immediate local state to break the loop
+  // NEW: Track raw bytes of the *active* file for Live Math
+  const [currentFileBytes, setCurrentFileBytes] = useState(0);
+
+  // ABORT REF
   const abortRef = useRef(false);
 
   // 1. CANCEL
@@ -41,9 +51,10 @@ export function useTransfer() {
     await invoke("cancel_transfer");
     setIsTransferring(false);
     setCurrentFile("Cancelled");
+    setCurrentFileBytes(0);
   }
 
-  // 2. PRE-FLIGHT CHECK (Triggers Modal if needed)
+  // 2. PRE-FLIGHT CHECK
   function startTransfer() {
     if (!sourcePath || !destPath || checkedFiles.size === 0) return;
 
@@ -60,30 +71,53 @@ export function useTransfer() {
     if (conflicts.length > 0) {
       // B. Found Conflicts -> Pause & Show Modal
       console.log("Found conflicts:", conflicts);
-      setConflicts(conflicts); // This opens the modal in App.tsx
+      setConflicts(conflicts);
       return;
     }
 
-    // C. No Conflicts -> Go straight to overwrite mode (safe because nothing to overwrite)
+    // C. No Conflicts -> Go
     executeTransfer(false);
   }
 
   // 3. RESOLUTION HANDLERS
   function resolveOverwrite() {
-    setConflicts([]); // Close Modal
-    executeTransfer(false); // False = Don't skip, just overwrite
+    setConflicts([]);
+    executeTransfer(false);
   }
 
   function resolveSkip() {
-    setConflicts([]); // Close Modal
-    executeTransfer(true); // True = Skip existing files
+    setConflicts([]);
+    executeTransfer(true);
   }
 
-  // 4. THE MAIN LOOP (Now accepts skipExisting flag)
+  // 4. THE MAIN LOOP
   async function executeTransfer(skipExisting: boolean) {
     setIsTransferring(true);
     setProgress(0);
+    setCurrentFileBytes(0);
     abortRef.current = false;
+
+    // --- NEW: INITIALIZE BATCH STATS ---
+    setTransferStartTime(Date.now());
+
+    // Calculate Total Batch Size (Async)
+    const filesToTransfer = fileList.filter((f) => checkedFiles.has(f.name));
+
+    // We Map to get sizes first to set the "Total" bar
+    const sizes = await Promise.all(
+      filesToTransfer.map(async (f) => {
+        try {
+          const separator = sourcePath!.endsWith("\\") ? "" : "\\";
+          const info = await stat(`${sourcePath}${separator}${f.name}`);
+          return info.size;
+        } catch {
+          return 0;
+        }
+      })
+    );
+
+    const totalBatchBytes = sizes.reduce((acc, curr) => acc + curr, 0);
+    setBatchInfo(totalBatchBytes); // Set the "Goal" for the global bar
 
     // Listeners
     const unlistenProgress = await listen<ProgressEvent>(
@@ -91,6 +125,7 @@ export function useTransfer() {
       (event) => {
         const { transferred, total, filename } = event.payload;
         setCurrentFile(filename);
+        setCurrentFileBytes(transferred); // <--- LIVE UPDATES
         if (total > 0) setProgress(Math.round((transferred / total) * 100));
       }
     );
@@ -107,8 +142,7 @@ export function useTransfer() {
     );
 
     try {
-      const filesToTransfer = fileList.filter((f) => checkedFiles.has(f.name));
-
+      // We loop through the filesToTransfer array we already filtered
       for (const file of filesToTransfer) {
         // 🛑 LOOP CHECK: Did user hit stop?
         if (abortRef.current) {
@@ -118,21 +152,36 @@ export function useTransfer() {
 
         if (file.isDirectory) continue;
 
+        // Reset local bytes for next file
+        setCurrentFileBytes(0);
+
+        // --- GET FILE SIZE FOR ACCOUNTING ---
+        let fileSize = 0;
+        const separator = sourcePath!.endsWith("\\") ? "" : "\\";
+        const destSep = destPath!.endsWith("\\") ? "" : "\\";
+
+        try {
+          const info = await stat(`${sourcePath}${separator}${file.name}`);
+          fileSize = info.size;
+        } catch {
+          /* ignore */
+        }
+
         // --- SKIP LOGIC ---
-        // If skipExisting is TRUE, and file is in destFiles, we skip it.
-        if (skipExisting && useAppStore.getState().destFiles.has(file.name)) {
+        if (skipExisting && destFiles.has(file.name)) {
           console.log(`Skipping existing file: ${file.name}`);
+          addCompletedBytes(fileSize); // Mark this chunk as "Done" (Skipped)
           continue;
         }
 
-        // Optimization: Skip if already verified in this session
-        if (useAppStore.getState().verifiedFiles.has(file.name)) continue;
+        // Optimization: Skip if already verified
+        if (verifiedFiles.has(file.name)) {
+          addCompletedBytes(fileSize); // Mark this chunk as "Done" (Already there)
+          continue;
+        }
 
-        const srcSeparator = sourcePath!.endsWith("\\") ? "" : "\\";
-        const destSeparator = destPath!.endsWith("\\") ? "" : "\\";
-
-        const fullSource = `${sourcePath}${srcSeparator}${file.name}`;
-        const fullDest = `${destPath}${destSeparator}${file.name}`;
+        const fullSource = `${sourcePath}${separator}${file.name}`;
+        const fullDest = `${destPath}${destSep}${file.name}`;
 
         try {
           // RUN TRANSFER
@@ -144,6 +193,10 @@ export function useTransfer() {
           currentDestFiles.add(file.name);
           setDestFiles(currentDestFiles);
           addVerifiedFile(file.name);
+
+          // --- UPDATE GLOBAL PROGRESS ---
+          setCurrentFileBytes(0); // Reset local because we are adding to global
+          addCompletedBytes(fileSize);
         } catch (err: any) {
           // IF CANCELLED, STOP EVERYTHING
           if (err.toString().includes("CANCELLED")) {
@@ -168,22 +221,25 @@ export function useTransfer() {
         setTimeout(() => {
           setCurrentFile("");
           setProgress(0);
+          setCurrentFileBytes(0);
         }, 2000);
       } else {
         // If cancelled, reset immediately
         setCurrentFile("Stopped");
         setProgress(0);
+        setCurrentFileBytes(0);
       }
     }
   }
 
   return {
-    startTransfer, // The public trigger
+    startTransfer,
     cancelTransfer,
-    resolveOverwrite, // <--- New Export
-    resolveSkip, // <--- New Export
+    resolveOverwrite,
+    resolveSkip,
     isTransferring,
     currentFile,
+    currentFileBytes, // <--- EXPOSE THIS
     progress,
   };
 }

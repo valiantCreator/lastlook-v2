@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { stat } from "@tauri-apps/plugin-fs";
 import { useAppStore } from "../store/appStore";
+import { formatSize, formatDate } from "../utils/formatters"; // <--- IMPORT
 
 // FAIL-SAFE TYPE
 type FileStat = Awaited<ReturnType<typeof stat>>;
@@ -12,25 +13,6 @@ export function Inspector() {
   const [meta, setMeta] = useState<FileStat | null>(null);
   const [batchSize, setBatchSize] = useState<number>(0);
   const [isCalculating, setIsCalculating] = useState(false);
-
-  function formatSize(bytes: number) {
-    if (bytes === 0) return "0 B";
-    const k = 1024;
-    const sizes = ["B", "KB", "MB", "GB", "TB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
-  }
-
-  // HELPER: Format Date
-  function formatDate(date: Date | null | undefined) {
-    if (!date) return "Unknown";
-    return new Intl.DateTimeFormat("en-US", {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(new Date(date));
-  }
 
   // Effect: Single File
   useEffect(() => {
