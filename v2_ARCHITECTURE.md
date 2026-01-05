@@ -1,8 +1,8 @@
 # LastLook v2.0: Architecture & Technical Specs
 
-**Status:** Beta (Safety & Async Logic Active)
+**Status:** Beta (Job Manager & Safety Active)
 **Stack:** Tauri (Rust) + React (TypeScript) + Tailwind CSS + Zustand
-**Date:** January 3, 2026
+**Date:** January 4, 2026
 
 ---
 
@@ -48,8 +48,8 @@ _The React Frontend logic._
   - **Purpose:** Bootstraps React and mounts it to the DOM.
   - **Dependencies:** `react-dom/client`, `App.tsx`
 - **`App.tsx`**
-  - **Purpose:** The main layout container (Source/Dest/Inspector Grid). It composes the UI but contains **no logic**.
-  - **Dependencies:** `FileList.tsx`, `DestFileList.tsx`, `Inspector.tsx`, `useFileSystem`, `appStore`
+  - **Purpose:** The main layout container (Source/Dest/Inspector Grid). Replaces the static footer with the `JobDrawer`.
+  - **Dependencies:** `FileList`, `DestFileList`, `Inspector`, `JobDrawer`, `useFileSystem`, `appStore`
 - **`App.css`**
   - **Purpose:** Entry point for Tailwind directives (`@import "tailwindcss"`) and Custom Keyframe Animations (e.g., `.progress-stripe`).
   - **Dependencies:** Tailwind
@@ -73,6 +73,9 @@ _Pure UI elements (Presentation Layer)._
 - **`ConflictModal.tsx`**
   - **Purpose:** A modal dialog that appears when source files already exist in the destination. Offers options to "Overwrite All", "Skip Existing", or "Cancel".
   - **Dependencies:** None (Pure UI)
+- **`JobDrawer.tsx`**
+  - **Purpose:** The expandable bottom sheet that acts as the transfer controller. Displays Micro (File) & Macro (Batch) progress, live speed/ETA, and the transfer manifest.
+  - **Dependencies:** `appStore`, `formatters`
 
 #### Hooks (`src/hooks/`)
 
@@ -82,7 +85,7 @@ _Reusable Logic Layer._
   - **Purpose:** The Bridge between React and Tauri. Handles opening dialogs, scanning folders, and mounting destinations.
   - **Dependencies:** `@tauri-apps/plugin-dialog`, `@tauri-apps/plugin-fs`, `appStore`
 - **`useTransfer.ts`**
-  - **Purpose:** The Controller. Manages the transfer loop, listens for Rust events (`transfer-progress`, `transfer-verifying`), handles Cancellation logic, performs Pre-Flight Conflict Checks, and enforces batch selection rules.
+  - **Purpose:** The Controller. Manages the transfer loop, listens for Rust events (`transfer-progress`, `transfer-verifying`), handles Cancellation logic, performs Pre-Flight Conflict Checks, calculates Live Math (Speed/ETA), and enforces batch selection rules.
   - **Dependencies:** `appStore`, `@tauri-apps/api/core`
 
 #### Store (`src/store/`)
@@ -90,8 +93,16 @@ _Reusable Logic Layer._
 _Global State Management._
 
 - **`appStore.ts`**
-  - **Purpose:** The Single Source of Truth. Holds `sourcePath`, `destPath`, `fileList`, `destFiles`, `verifiedFiles`, `verifyingFiles` (Amber State), `checkedFiles` (Batch), `conflicts` (Safety), and `selectedFile`.
+  - **Purpose:** The Single Source of Truth. Holds `sourcePath`, `destPath`, `fileList`, `destFiles`, `verifiedFiles`, `verifyingFiles` (Amber State), `checkedFiles` (Batch), `conflicts` (Safety), `batchTotalBytes`, `completedBytes`, and `transferStartTime`.
   - **Dependencies:** `zustand`
+
+#### Utils (`src/utils/`)
+
+_Shared helper functions._
+
+- **`formatters.ts`**
+  - **Purpose:** Standardizes data display across the app.
+  - **Exports:** `formatSize` (Bytes -> GB), `formatDate` (Timestamp -> String), `formatDuration` (ms -> HH:MM:SS).
 
 ### 2.3 Backend (`src-tauri/`)
 
@@ -127,9 +138,10 @@ _The Rust Core._
 8.  **Logic:** `useTransfer` performs **Pre-Flight Check**.
     - _Conflict:_ `ConflictModal` opens. User selects "Overwrite" or "Skip".
     - _No Conflict:_ Transfer begins.
-9.  **Event:** Rust emits `transfer-progress` -> UI updates Blue/Green bar.
-10. **Event:** Rust emits `transfer-verifying` -> UI updates to **Yellow** bar/dot.
-11. **Completion:** Verification passes -> UI updates to **Green** dot + Shield.
+9.  **Logic:** `useTransfer` calculates `batchTotalBytes` and sets `transferStartTime`.
+10. **Event:** Rust emits `transfer-progress` -> `JobDrawer` updates "Micro" bar (Green) and "Macro" bar (Blue) via Live Math.
+11. **Event:** Rust emits `transfer-verifying` -> `JobDrawer` updates UI to **Striped Yellow** (Verifying).
+12. **Completion:** Verification passes -> UI updates to **Green** dot + Shield.
 
 ---
 
@@ -194,7 +206,7 @@ _Goal: Restore v1 Parity for Selection & Stats._
 - [x] **Synced Highlight:** Clicking a file highlights it in both Source & Dest lists.
 - [x] **Cleanup:** Remove the debug "Generate Hash" button.
 
-### 🔮 Phase 7: The Controller (In Progress)
+### ✅ Phase 7: The Controller (Core Logic Completed)
 
 _Goal: Performance Optimization & Flow Control._
 
@@ -203,7 +215,24 @@ _Goal: Performance Optimization & Flow Control._
 - [x] **Amber UI:** "Yellow Dot" and Striped Progress Bar for "Verifying" state.
 - [x] **Cancel/Pause Logic:** Implement a Rust `Receiver` channel (using `AtomicBool`) to interrupt the loop when the user clicks Stop.
 - [x] **Overwrite Protection:** Add a pre-flight check to warn the user before overwriting existing files in the Destination.
-- [ ] **Job Modal:** A persistent status bar (or modal) that displays progress even if the user navigates away or changes selection.
+- [x] **Job Drawer (Core):** Implemented the expandable footer with Global Metrics (Micro/Macro progress) and Live Math.
+
+### 🔮 Phase 7.5: UX Refinement & Layout Physics (Sprints)
+
+_Goal: Address User Feedback, Fix Layout Glitches, and Improve Data Visualization._
+
+#### Sprint 1: Physics & Layout (The "Glitch" Fixes)
+
+- [ ] **Fix "Ground Breaking" Scroll:** Replace aggressive `scrollIntoView` with container-contained scroll logic to prevent the main Window/Header from shifting off-screen.
+- [ ] **Fix Drawer Overlap:** Refactor `App.tsx` layout to use Flex-Column. The Drawer should physically push the list content up (reducing container height) rather than floating on top (`absolute` vs `flex`).
+- [ ] **Drawer State Logic:** Decouple Drawer visibility from transfer state. Allow user to expand/collapse Drawer in "Idle" mode and ensure it stays open/closed based on user preference, not just transfer status.
+
+#### Sprint 2: Data Logic & Features
+
+- [ ] **Orphan Logic (The "Green Ghost"):** Update `DestFileList` to differentiate between "Synced" (Green) and "Orphan/Dest Only" (Red/Grey). Files in Dest but not Source should not be Green.
+- [ ] **Swap Sources Button:** Add a utility button to swap `SourcePath` and `DestPath` variables to reverse transfer direction.
+- [ ] **Destination Filters:** Add a toggle to `DestFileList` to show "All Files" vs "Synced Only".
+- [ ] **Empty Space Fix:** Ensure the bottom of the application is properly sealed so scrolling doesn't reveal the "void" beneath the UI.
 
 ### 🔮 Phase 8: The Visualizer
 

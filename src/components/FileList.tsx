@@ -34,7 +34,11 @@ export function FileList({
 
   useEffect(() => {
     if (activeRef.current) {
-      activeRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+      // FIX: Changed from 'center' to 'nearest' to prevent Window scrolling
+      activeRef.current.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+      });
     }
   }, [selectedFile]);
 
@@ -75,7 +79,7 @@ export function FileList({
         {files.map((file) => (
           <FileRow
             key={file.name}
-            ref={selectedFile?.name === file.name ? activeRef : null} // <--- PASS REF IF SELECTED
+            ref={selectedFile?.name === file.name ? activeRef : null}
             file={file}
             isSynced={destFiles.has(file.name)}
             isVerified={verifiedFiles.has(file.name)}

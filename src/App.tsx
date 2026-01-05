@@ -41,7 +41,7 @@ function App() {
     resolveSkip,
     isTransferring,
     currentFile,
-    currentFileBytes, // <--- NEW
+    currentFileBytes,
     progress,
   } = useTransfer();
 
@@ -126,9 +126,8 @@ function App() {
         </div>
 
         {/* Content */}
-        <div className="flex-1 p-4 flex flex-col min-h-0 mb-20">
-          {" "}
-          {/* mb-20 creates space for JobDrawer */}
+        {/* FIX: Removed 'mb-20'. Flexbox now manages the height automatically. */}
+        <div className="flex-1 p-4 flex flex-col min-h-0">
           {!destPath ? (
             <div className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-zinc-800 rounded-xl hover:border-zinc-700 transition-colors bg-zinc-900/20">
               <button
@@ -159,13 +158,13 @@ function App() {
           )}
         </div>
 
-        {/* --- JOB DRAWER (Replaces Footer) --- */}
+        {/* --- JOB DRAWER (Stacked in Flex Column) --- */}
         <JobDrawer
           isTransferring={isTransferring}
           currentFile={currentFile}
-          currentFileBytes={currentFileBytes} // <--- PASS DATA
+          currentFileBytes={currentFileBytes}
           progress={progress}
-          isVerifying={isVerifying} // <--- PASS STATE
+          isVerifying={isVerifying}
           onStart={startTransfer}
           onCancel={cancelTransfer}
           canStart={!!(sourcePath && destPath && checkedFiles.size > 0)}

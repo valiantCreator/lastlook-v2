@@ -7,7 +7,7 @@ interface DestFileListProps {
 }
 
 export function DestFileList({ files }: DestFileListProps) {
-  const { selectedFile, setSelectedFile, sourcePath } = useAppStore(); // <--- Added sourcePath
+  const { selectedFile, setSelectedFile, sourcePath } = useAppStore();
   const sortedFiles = Array.from(files).sort();
 
   // Refs for auto-scrolling
@@ -16,7 +16,11 @@ export function DestFileList({ files }: DestFileListProps) {
   // AUTO-SCROLL EFFECT
   useEffect(() => {
     if (activeRef.current) {
-      activeRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+      // FIX: Changed to 'nearest' to prevent "Ground Breaking" window scroll glitch
+      activeRef.current.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+      });
     }
   }, [selectedFile]);
 
@@ -47,23 +51,23 @@ export function DestFileList({ files }: DestFileListProps) {
               });
             }}
             className={`
-               flex items-center gap-3 p-2 rounded cursor-pointer transition-all duration-200 border
-               ${
-                 isSelected
-                   ? "bg-zinc-800 border-zinc-700 shadow-md ring-1 ring-zinc-700"
-                   : "border-transparent hover:bg-zinc-800/30 opacity-50 hover:opacity-100"
-               }
-             `}
+                flex items-center gap-3 p-2 rounded cursor-pointer transition-all duration-200 border
+                ${
+                  isSelected
+                    ? "bg-zinc-800 border-zinc-700 shadow-md ring-1 ring-zinc-700"
+                    : "border-transparent hover:bg-zinc-800/30 opacity-50 hover:opacity-100"
+                }
+              `}
           >
             {/* CONDITIONAL DOT COLOR */}
             <div
               className={`w-2 h-2 rounded-full shadow-sm
-               ${
-                 sourcePath
-                   ? "bg-emerald-500 shadow-emerald-500/50" // Source Exists = Green (Synced)
-                   : "bg-zinc-600 shadow-zinc-900/50" // No Source = Grey (Neutral)
-               }
-             `}
+                ${
+                  sourcePath
+                    ? "bg-emerald-500 shadow-emerald-500/50" // Source Exists = Green (Synced)
+                    : "bg-zinc-600 shadow-zinc-900/50" // No Source = Grey (Neutral)
+                }
+              `}
             />
 
             <p

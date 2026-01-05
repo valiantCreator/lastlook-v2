@@ -5,9 +5,9 @@ import { formatSize, formatDuration } from "../utils/formatters";
 interface JobDrawerProps {
   isTransferring: boolean;
   currentFile: string;
-  currentFileBytes: number; // <--- NEW PROP
+  currentFileBytes: number;
   progress: number;
-  isVerifying: boolean; // <--- NEW PROP
+  isVerifying: boolean;
   onStart: () => void;
   onCancel: () => void;
   canStart: boolean;
@@ -43,7 +43,7 @@ export function JobDrawer({
 
     const interval = setInterval(() => {
       const now = Date.now();
-      const elapsed = now - transferStartTime; // ms
+      const elapsed = now - transferStartTime;
       if (elapsed < 1000) return;
 
       // LIVE MATH: Total Done = Finished Files + Current Active File Progress
@@ -70,9 +70,9 @@ export function JobDrawer({
     completedBytes,
     batchTotalBytes,
     currentFileBytes,
-  ]); // <--- Added dependency
+  ]);
 
-  // Global Progress % (Completed / Total)
+  // Global Progress %
   const totalProcessed = completedBytes + currentFileBytes;
   const globalProgress =
     batchTotalBytes > 0
@@ -85,15 +85,15 @@ export function JobDrawer({
   return (
     <div
       className={`
-        absolute bottom-0 left-0 right-0 bg-zinc-900 border-t border-zinc-800 shadow-[0_-5px_25px_rgba(0,0,0,0.5)]
-        transition-all duration-300 ease-out flex flex-col z-40
+        w-full bg-zinc-900 border-t border-zinc-800 shadow-[0_-5px_25px_rgba(0,0,0,0.5)]
+        transition-all duration-300 ease-out flex flex-col z-40 shrink-0
         ${isDrawerOpen ? "h-[450px]" : "h-20"}
       `}
     >
-      {/* --- HEADER (ALWAYS VISIBLE) --- */}
+      {/* --- HEADER (CLICK TO TOGGLE) --- */}
       <div
         className="h-20 px-4 flex items-center justify-between shrink-0 cursor-pointer hover:bg-zinc-800/30 transition-colors"
-        onClick={() => isTransferring && toggleDrawer(!isDrawerOpen)}
+        onClick={() => toggleDrawer(!isDrawerOpen)} // FIX: Allow toggle anytime
       >
         {isTransferring ? (
           <div className="flex-1 flex items-center gap-4 min-w-0">
@@ -132,7 +132,7 @@ export function JobDrawer({
                     isVerifying
                       ? "bg-yellow-500 progress-stripe"
                       : "bg-emerald-500"
-                  }`} // <--- YELLOW LOGIC
+                  }`}
                   style={{ width: `${progress}%` }}
                 />
               </div>
@@ -149,61 +149,63 @@ export function JobDrawer({
                 />
               </div>
             </div>
-
-            {/* EXPAND ICON */}
-            <div className="text-zinc-600">
-              {isDrawerOpen ? (
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M19 9l-7 7-7-7"
-                  />
-                </svg>
-              ) : (
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M5 15l7-7 7 7"
-                  />
-                </svg>
-              )}
-            </div>
           </div>
         ) : (
-          /* IDLE STATE: START BUTTON */
-          <div className="w-full flex items-center justify-center">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onStart();
-              }}
-              disabled={!canStart}
-              className={`w-full max-w-sm py-3 rounded-md font-bold text-xs uppercase tracking-wider transition-all shadow-lg
-                ${
-                  !canStart
-                    ? "bg-zinc-800 text-zinc-600 cursor-not-allowed shadow-none border border-zinc-700"
-                    : "bg-red-600 hover:bg-red-500 text-white shadow-red-900/20 cursor-pointer active:scale-95 border border-red-500"
-                }
-              `}
-            >
-              Transfer Files
-            </button>
+          /* IDLE STATE: START BUTTON + Expand Toggle */
+          <div className="w-full flex items-center gap-4">
+            <div className="flex-1 flex justify-center">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onStart();
+                }}
+                disabled={!canStart}
+                className={`w-full max-w-sm py-3 rounded-md font-bold text-xs uppercase tracking-wider transition-all shadow-lg
+                    ${
+                      !canStart
+                        ? "bg-zinc-800 text-zinc-600 cursor-not-allowed shadow-none border border-zinc-700"
+                        : "bg-red-600 hover:bg-red-500 text-white shadow-red-900/20 cursor-pointer active:scale-95 border border-red-500"
+                    }
+                  `}
+              >
+                Transfer Files
+              </button>
+            </div>
           </div>
         )}
+
+        {/* EXPAND ICON (Always Visible) */}
+        <div className="text-zinc-600 pl-4 shrink-0">
+          {isDrawerOpen ? (
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M19 9l-7 7-7-7"
+              />
+            </svg>
+          ) : (
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M5 15l7-7 7 7"
+              />
+            </svg>
+          )}
+        </div>
       </div>
 
       {/* --- BODY (EXPANDED MANIFEST) --- */}
@@ -238,32 +240,36 @@ export function JobDrawer({
             <p className="text-[10px] text-zinc-500 uppercase font-bold mb-2">
               Transfer Queue
             </p>
-            {manifest.map((f) => {
-              const isDone = verifiedFiles.has(f.name);
-              const isActive =
-                currentFile.includes(f.name) || currentFile === f.name;
+            {manifest.length === 0 ? (
+              <p className="text-xs text-zinc-600 italic">No files selected.</p>
+            ) : (
+              manifest.map((f) => {
+                const isDone = verifiedFiles.has(f.name);
+                const isActive =
+                  currentFile.includes(f.name) || currentFile === f.name;
 
-              return (
-                <div
-                  key={f.name}
-                  className={`
-                       flex items-center justify-between p-2 rounded border text-xs font-mono
-                       ${
-                         isActive
-                           ? "bg-zinc-800 border-zinc-600 text-white shadow-md scale-[1.01] transition-transform"
-                           : isDone
-                           ? "bg-zinc-900/30 border-transparent text-zinc-500"
-                           : "bg-transparent border-transparent text-zinc-600"
-                       }
-                     `}
-                >
-                  <span className="truncate">{f.name}</span>
-                  <span className="shrink-0 text-[10px] font-bold uppercase">
-                    {isDone ? "Done" : isActive ? "Active" : "Pending"}
-                  </span>
-                </div>
-              );
-            })}
+                return (
+                  <div
+                    key={f.name}
+                    className={`
+                          flex items-center justify-between p-2 rounded border text-xs font-mono
+                          ${
+                            isActive
+                              ? "bg-zinc-800 border-zinc-600 text-white shadow-md scale-[1.01] transition-transform"
+                              : isDone
+                              ? "bg-zinc-900/30 border-transparent text-zinc-500"
+                              : "bg-transparent border-transparent text-zinc-600"
+                          }
+                        `}
+                  >
+                    <span className="truncate">{f.name}</span>
+                    <span className="shrink-0 text-[10px] font-bold uppercase">
+                      {isDone ? "Done" : isActive ? "Active" : "Pending"}
+                    </span>
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
       </div>
