@@ -1,8 +1,8 @@
 # LastLook v2.0: Architecture & Technical Specs
 
-**Status:** Beta (Job Manager & Safety Active)
+**Status:** Beta (Data Logic & Filters - Sprint 2 Complete)
 **Stack:** Tauri (Rust) + React (TypeScript) + Tailwind CSS + Zustand
-**Date:** January 4, 2026
+**Date:** January 5, 2026
 
 ---
 
@@ -48,7 +48,7 @@ _The React Frontend logic._
   - **Purpose:** Bootstraps React and mounts it to the DOM.
   - **Dependencies:** `react-dom/client`, `App.tsx`
 - **`App.tsx`**
-  - **Purpose:** The main layout container (Source/Dest/Inspector Grid). Replaces the static footer with the `JobDrawer`.
+  - **Purpose:** The main layout container. Uses a Flex-Column layout to prevent overlap. **Updated:** Includes the "Swap Paths" button in the Source Header.
   - **Dependencies:** `FileList`, `DestFileList`, `Inspector`, `JobDrawer`, `useFileSystem`, `appStore`
 - **`App.css`**
   - **Purpose:** Entry point for Tailwind directives (`@import "tailwindcss"`) and Custom Keyframe Animations (e.g., `.progress-stripe`).
@@ -59,10 +59,10 @@ _The React Frontend logic._
 _Pure UI elements (Presentation Layer)._
 
 - **`FileList.tsx`**
-  - **Purpose:** Renders the scrollable list of source files OR the "Select Source" empty state. Passes `hasDest` state to rows. Implements "Snap-To" scrolling via refs.
+  - **Purpose:** Renders the scrollable list of source files. Implements "Snap-To" scrolling using `block: "nearest"`.
   - **Dependencies:** `FileRow.tsx`, `DirEntry` (type), `appStore`
 - **`DestFileList.tsx`**
-  - **Purpose:** Renders the destination file list. Supports auto-scrolling, synced highlighting, and neutral state (Grey dots) when no Source is active.
+  - **Purpose:** Renders the destination file list. **Updated:** Differentiates between Synced (Green) and Orphan (Red) files. Includes a "Hide Orphans" toggle filter.
   - **Dependencies:** `appStore`
 - **`FileRow.tsx`**
   - **Purpose:** Renders a single file row. Contains the "Traffic Light" logic (Green/Yellow/Red/Grey dot), Checkboxes, and click handlers. Wrapped in `forwardRef`.
@@ -74,7 +74,7 @@ _Pure UI elements (Presentation Layer)._
   - **Purpose:** A modal dialog that appears when source files already exist in the destination. Offers options to "Overwrite All", "Skip Existing", or "Cancel".
   - **Dependencies:** None (Pure UI)
 - **`JobDrawer.tsx`**
-  - **Purpose:** The expandable bottom sheet that acts as the transfer controller. Displays Micro (File) & Macro (Batch) progress, live speed/ETA, and the transfer manifest.
+  - **Purpose:** The expandable bottom sheet controller. Can be toggled in "Idle" state. Displays Micro/Macro progress, live speed/ETA, and the transfer manifest.
   - **Dependencies:** `appStore`, `formatters`
 
 #### Hooks (`src/hooks/`)
@@ -93,7 +93,7 @@ _Reusable Logic Layer._
 _Global State Management._
 
 - **`appStore.ts`**
-  - **Purpose:** The Single Source of Truth. Holds `sourcePath`, `destPath`, `fileList`, `destFiles`, `verifiedFiles`, `verifyingFiles` (Amber State), `checkedFiles` (Batch), `conflicts` (Safety), `batchTotalBytes`, `completedBytes`, and `transferStartTime`.
+  - **Purpose:** The Single Source of Truth. Holds `sourcePath`, `destPath`, `fileList`, `destFiles`, `verifiedFiles`, `verifyingFiles` (Amber State), `checkedFiles` (Batch), `conflicts` (Safety), `batchTotalBytes`, `completedBytes`, and `transferStartTime`. **Updated:** Includes `swapPaths` action which performs a full state reset to prevent ghost data.
   - **Dependencies:** `zustand`
 
 #### Utils (`src/utils/`)
@@ -153,7 +153,7 @@ _The Rust Core._
 - **Accents:**
   - **Success:** `text-emerald-400`, `bg-emerald-500` (Synced/Verified)
   - **Verifying:** `text-yellow-400`, `bg-yellow-500` (Pending Integrity Check)
-  - **Error:** `text-red-400`, `bg-red-500` (Missing)
+  - **Orphan/Error:** `text-red-400`, `bg-red-500` (File exists in Dest but not Source)
   - **Neutral:** `text-zinc-500`, `bg-zinc-600` (No Drive Connected)
   - **Folder:** `text-blue-400`, `bg-blue-500` (Directory)
 
@@ -217,22 +217,22 @@ _Goal: Performance Optimization & Flow Control._
 - [x] **Overwrite Protection:** Add a pre-flight check to warn the user before overwriting existing files in the Destination.
 - [x] **Job Drawer (Core):** Implemented the expandable footer with Global Metrics (Micro/Macro progress) and Live Math.
 
-### 🔮 Phase 7.5: UX Refinement & Layout Physics (Sprints)
+### ✅ Phase 7.5: UX Refinement & Layout Physics (Completed)
 
 _Goal: Address User Feedback, Fix Layout Glitches, and Improve Data Visualization._
 
-#### Sprint 1: Physics & Layout (The "Glitch" Fixes)
+#### Sprint 1: Physics & Layout (Completed)
 
-- [ ] **Fix "Ground Breaking" Scroll:** Replace aggressive `scrollIntoView` with container-contained scroll logic to prevent the main Window/Header from shifting off-screen.
-- [ ] **Fix Drawer Overlap:** Refactor `App.tsx` layout to use Flex-Column. The Drawer should physically push the list content up (reducing container height) rather than floating on top (`absolute` vs `flex`).
-- [ ] **Drawer State Logic:** Decouple Drawer visibility from transfer state. Allow user to expand/collapse Drawer in "Idle" mode and ensure it stays open/closed based on user preference, not just transfer status.
+- [x] **Fix "Ground Breaking" Scroll:** Replace aggressive `scrollIntoView` with container-contained scroll logic to prevent the main Window/Header from shifting off-screen.
+- [x] **Fix Drawer Overlap:** Refactor `App.tsx` layout to use Flex-Column. The Drawer should physically push the list content up (reducing container height) rather than floating on top (`absolute` vs `flex`).
+- [x] **Drawer State Logic:** Decouple Drawer visibility from transfer state. Allow user to expand/collapse Drawer in "Idle" mode and ensure it stays open/closed based on user preference, not just transfer status.
 
-#### Sprint 2: Data Logic & Features
+#### Sprint 2: Data Logic & Features (Completed)
 
-- [ ] **Orphan Logic (The "Green Ghost"):** Update `DestFileList` to differentiate between "Synced" (Green) and "Orphan/Dest Only" (Red/Grey). Files in Dest but not Source should not be Green.
-- [ ] **Swap Sources Button:** Add a utility button to swap `SourcePath` and `DestPath` variables to reverse transfer direction.
-- [ ] **Destination Filters:** Add a toggle to `DestFileList` to show "All Files" vs "Synced Only".
-- [ ] **Empty Space Fix:** Ensure the bottom of the application is properly sealed so scrolling doesn't reveal the "void" beneath the UI.
+- [x] **Orphan Logic (The "Green Ghost"):** Update `DestFileList` to differentiate between "Synced" (Green) and "Orphan/Dest Only" (Red/Grey). Files in Dest but not Source should not be Green.
+- [x] **Swap Sources Button:** Add a utility button to swap `SourcePath` and `DestPath` variables to reverse transfer direction.
+- [x] **Destination Filters:** Add a toggle to `DestFileList` to show "All Files" vs "Synced Only".
+- [x] **Empty Space Fix:** Ensure the bottom of the application is properly sealed so scrolling doesn't reveal the "void" beneath the UI.
 
 ### 🔮 Phase 8: The Visualizer
 

@@ -22,6 +22,7 @@ function App() {
     verifyingFiles,
     conflicts,
     setConflicts,
+    swapPaths, // <--- NEW IMPORT
   } = useAppStore();
 
   const {
@@ -81,14 +82,38 @@ function App() {
           <span className="font-bold text-sm tracking-wide text-zinc-100">
             SOURCE
           </span>
-          {sourcePath && (
-            <span
-              className="text-[10px] font-mono text-zinc-500 truncate max-w-[200px]"
-              title={sourcePath}
-            >
-              {sourcePath}
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            {sourcePath && (
+              <>
+                <span
+                  className="text-[10px] font-mono text-zinc-500 truncate max-w-[150px]"
+                  title={sourcePath}
+                >
+                  {sourcePath}
+                </span>
+                {/* SWAP BUTTON */}
+                <button
+                  onClick={swapPaths}
+                  className="p-1 hover:bg-zinc-700 rounded text-zinc-400 hover:text-white transition-colors"
+                  title="Swap Source & Destination"
+                >
+                  <svg
+                    className="w-3.5 h-3.5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
+                    />
+                  </svg>
+                </button>
+              </>
+            )}
+          </div>
         </div>
 
         <FileList

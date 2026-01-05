@@ -15,11 +15,11 @@ interface AppState {
   // CONFLICT STATE
   conflicts: string[];
 
-  // --- NEW: JOB DRAWER STATE ---
+  // --- JOB DRAWER STATE ---
   isDrawerOpen: boolean;
-  batchTotalBytes: number; // The size of the ENTIRE job (50GB)
-  completedBytes: number; // Bytes fully finished (files 1-4 done)
-  transferStartTime: number | null; // Timestamp when job started
+  batchTotalBytes: number;
+  completedBytes: number;
+  transferStartTime: number | null;
 
   // ACTIONS
   setSourcePath: (path: string | null) => void;
@@ -41,10 +41,13 @@ interface AppState {
   clearChecked: () => void;
   resetSource: () => void;
 
-  // --- NEW: DRAWER ACTIONS ---
+  // --- NEW: UTILITY ACTIONS ---
+  swapPaths: () => void; // <--- NEW
+
+  // --- DRAWER ACTIONS ---
   toggleDrawer: (isOpen: boolean) => void;
   setBatchInfo: (totalBytes: number) => void;
-  addCompletedBytes: (bytes: number) => void; // Call this when a file finishes
+  addCompletedBytes: (bytes: number) => void;
   setTransferStartTime: (time: number | null) => void;
 }
 
@@ -115,6 +118,26 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setAllChecked: (filenames) => set({ checkedFiles: new Set(filenames) }),
   clearChecked: () => set({ checkedFiles: new Set() }),
+
+  // --- UTILITY ACTIONS ---
+  swapPaths: () =>
+    set((state) => ({
+      sourcePath: state.destPath,
+      destPath: state.sourcePath,
+      // Clear all file lists to force re-scan and prevent ghost data
+      fileList: [],
+      destFiles: new Set(),
+      verifiedFiles: new Set(),
+      verifyingFiles: new Set(),
+      checkedFiles: new Set(),
+      selectedFile: null,
+      conflicts: [],
+      // Reset Drawer
+      batchTotalBytes: 0,
+      completedBytes: 0,
+      transferStartTime: null,
+      isDrawerOpen: false,
+    })),
 
   // --- DRAWER LOGIC ---
   toggleDrawer: (isOpen) => set({ isDrawerOpen: isOpen }),
