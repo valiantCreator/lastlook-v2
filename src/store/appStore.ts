@@ -10,6 +10,7 @@ interface AppState {
   verifiedFiles: Set<string>;
   verifyingFiles: Set<string>;
   selectedFile: DirEntry | null;
+  selectedFileOrigin: "source" | "dest" | null; // <--- NEW: Tracks where the file is from
   checkedFiles: Set<string>;
 
   // CONFLICT STATE
@@ -31,7 +32,8 @@ interface AppState {
   removeVerifyingFile: (filename: string) => void;
   addVerifiedFile: (filename: string) => void;
 
-  setSelectedFile: (file: DirEntry | null) => void;
+  // UPDATED: Now accepts an optional origin ('source' is default for backward compatibility)
+  setSelectedFile: (file: DirEntry | null, origin?: "source" | "dest") => void;
   setConflicts: (files: string[]) => void;
 
   // CHECKBOX ACTIONS
@@ -42,7 +44,7 @@ interface AppState {
   resetSource: () => void;
 
   // --- NEW: UTILITY ACTIONS ---
-  swapPaths: () => void; // <--- NEW
+  swapPaths: () => void;
 
   // --- DRAWER ACTIONS ---
   toggleDrawer: (isOpen: boolean) => void;
@@ -59,6 +61,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   verifiedFiles: new Set(),
   verifyingFiles: new Set(),
   selectedFile: null,
+  selectedFileOrigin: null, // <--- NEW
   checkedFiles: new Set(),
   conflicts: [],
 
@@ -95,7 +98,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       return { verifiedFiles: newSet };
     }),
 
-  setSelectedFile: (file) => set({ selectedFile: file }),
+  // UPDATED: Sets origin. Defaults to "source" if not specified.
+  setSelectedFile: (file, origin = "source") =>
+    set({ selectedFile: file, selectedFileOrigin: origin }),
+
   setConflicts: (files) => set({ conflicts: files }),
 
   // --- BATCH LOGIC ---
@@ -131,6 +137,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       verifyingFiles: new Set(),
       checkedFiles: new Set(),
       selectedFile: null,
+      selectedFileOrigin: null, // <--- RESET
       conflicts: [],
       // Reset Drawer
       batchTotalBytes: 0,
@@ -152,6 +159,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       sourcePath: null,
       fileList: [],
       selectedFile: null,
+      selectedFileOrigin: null, // <--- RESET
       verifiedFiles: new Set(),
       verifyingFiles: new Set(),
       checkedFiles: new Set(),

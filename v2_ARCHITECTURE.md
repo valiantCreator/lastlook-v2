@@ -48,7 +48,7 @@ _The React Frontend logic._
   - **Purpose:** Bootstraps React and mounts it to the DOM.
   - **Dependencies:** `react-dom/client`, `App.tsx`
 - **`App.tsx`**
-  - **Purpose:** The main layout container. Uses a Flex-Column layout to prevent overlap. **Updated:** Includes the "Swap Paths" button in the Source Header.
+  - **Purpose:** The main layout container (Source/Dest/Inspector Grid). It composes the UI but contains **no logic**. **Updated:** Uses a Flex-Column layout to ensure the `JobDrawer` physically pushes the middle panel up when expanded. Includes the "Swap Paths" button in the Source Header.
   - **Dependencies:** `FileList`, `DestFileList`, `Inspector`, `JobDrawer`, `useFileSystem`, `appStore`
 - **`App.css`**
   - **Purpose:** Entry point for Tailwind directives (`@import "tailwindcss"`) and Custom Keyframe Animations (e.g., `.progress-stripe`).
@@ -59,10 +59,12 @@ _The React Frontend logic._
 _Pure UI elements (Presentation Layer)._
 
 - **`FileList.tsx`**
-  - **Purpose:** Renders the scrollable list of source files. Implements "Snap-To" scrolling using `block: "nearest"`.
+  - **Purpose:** Renders the scrollable list of source files OR the "Select Source" empty state. Passes `hasDest` state to rows.
+  - **Updated Logic:** Implements "Snap-To" scrolling via `block: "nearest"` to prevent window shifting.
   - **Dependencies:** `FileRow.tsx`, `DirEntry` (type), `appStore`
 - **`DestFileList.tsx`**
-  - **Purpose:** Renders the destination file list. **Updated:** Differentiates between Synced (Green) and Orphan (Red) files. Includes a "Hide Orphans" toggle filter.
+  - **Purpose:** Renders the destination file list. Supports auto-scrolling, synced highlighting, and neutral state (Grey dots) when no Source is active.
+  - **Updated Logic:** Differentiates between Synced (Green) and Orphan (Red) files. Includes "Hide Orphans" filter toggle.
   - **Dependencies:** `appStore`
 - **`FileRow.tsx`**
   - **Purpose:** Renders a single file row. Contains the "Traffic Light" logic (Green/Yellow/Red/Grey dot), Checkboxes, and click handlers. Wrapped in `forwardRef`.
@@ -74,7 +76,8 @@ _Pure UI elements (Presentation Layer)._
   - **Purpose:** A modal dialog that appears when source files already exist in the destination. Offers options to "Overwrite All", "Skip Existing", or "Cancel".
   - **Dependencies:** None (Pure UI)
 - **`JobDrawer.tsx`**
-  - **Purpose:** The expandable bottom sheet controller. Can be toggled in "Idle" state. Displays Micro/Macro progress, live speed/ETA, and the transfer manifest.
+  - **Purpose:** The expandable bottom sheet that acts as the transfer controller. Displays Micro (File) & Macro (Batch) progress, live speed/ETA, and the transfer manifest.
+  - **Updated Logic:** Can be toggled in "Idle" state.
   - **Dependencies:** `appStore`, `formatters`
 
 #### Hooks (`src/hooks/`)
@@ -93,7 +96,8 @@ _Reusable Logic Layer._
 _Global State Management._
 
 - **`appStore.ts`**
-  - **Purpose:** The Single Source of Truth. Holds `sourcePath`, `destPath`, `fileList`, `destFiles`, `verifiedFiles`, `verifyingFiles` (Amber State), `checkedFiles` (Batch), `conflicts` (Safety), `batchTotalBytes`, `completedBytes`, and `transferStartTime`. **Updated:** Includes `swapPaths` action which performs a full state reset to prevent ghost data.
+  - **Purpose:** The Single Source of Truth. Holds `sourcePath`, `destPath`, `fileList`, `destFiles`, `verifiedFiles`, `verifyingFiles` (Amber State), `checkedFiles` (Batch), `conflicts` (Safety), `batchTotalBytes`, `completedBytes`, and `transferStartTime`.
+  - **Updated:** Includes `swapPaths` action which performs a full state reset to prevent ghost data.
   - **Dependencies:** `zustand`
 
 #### Utils (`src/utils/`)
@@ -109,7 +113,7 @@ _Shared helper functions._
 _The Rust Core._
 
 - **`tauri.conf.json`**
-  - **Purpose:** Configures window size, permissions, and bundle identifiers (`com.lastlook.app`).
+  - **Purpose:** Configures window size, permissions, and bundle identifiers (`com.lastlook.app`). Defines `externalBin` for FFmpeg sidecar.
 - **`capabilities/default.json`**
   - **Purpose:** Security rules defining what the frontend is allowed to do.
   - **Permissions:**
@@ -126,7 +130,40 @@ _The Rust Core._
 
 ---
 
-## 3. Data Flow
+## 3. Global State Schema (`src/store/appStore.ts`)
+
+The application uses **Zustand** for state management. This is the exact shape of the store:
+
+```typescript
+interface AppState {
+  // --- PATHS ---
+  sourcePath: string | null;
+  destPath: string | null;
+
+  // --- LISTS ---
+  fileList: DirEntry[]; // Source of Truth for Source Folder
+  destFiles: Set<string>; // Fast lookup for Destination presence
+  checkedFiles: Set<string>; // Batch Selection (User clicked checkboxes)
+
+  // --- STATUS FLAGS ---
+  verifiedFiles: Set<string>; // Files that passed xxHash check
+  verifyingFiles: Set<string>; // Files currently hashing (Yellow UI)
+  conflicts: string[]; // Files causing overwrite warnings
+
+  // --- JOB METRICS (The "Live Math" Engine) ---
+  isDrawerOpen: boolean;
+  batchTotalBytes: number; // Sum of all selected file sizes
+  completedBytes: number; // Sum of fully finished files
+  transferStartTime: number; // Epoch ms when job started
+
+  // --- ACTIONS ---
+  swapPaths: () => void; // Swaps Source/Dest and resets all lists
+}
+```
+
+---
+
+## 4. Data Flow
 
 1.  **Action:** User clicks "Select Source" in UI.
 2.  **Hook:** `useFileSystem.selectSource()` is called.
@@ -145,7 +182,15 @@ _The Rust Core._
 
 ---
 
-## 4. Style Guide (Tailwind)
+## 5. Security & Permissions
+
+- **`fs:allow-stat`**: Read-only access to file metadata (Size/Date).
+- **`fs:read/write`**: Explicitly scoped to the `sourcePath` and `destPath` selected by the user.
+- **`shell:allow-execute`**: (Upcoming Phase 8) Required for `ffmpeg` sidecar execution.
+
+---
+
+## 6. Style Guide (Tailwind)
 
 - **Backgrounds:** `bg-zinc-950` (App BG), `bg-zinc-900` (Panels)
 - **Borders:** `border-zinc-800`
@@ -159,7 +204,49 @@ _The Rust Core._
 
 ---
 
-## 5. Implementation Roadmap
+## 7. Deployment & Packaging
+
+To distribute LastLook v2 to other users, follow these steps.
+
+### 7.1 Prerequisites
+
+1.  **FFmpeg Sidecar:** You must manually download the `ffmpeg` binary for Windows.
+    - Download `ffmpeg-release-essentials.zip`.
+    - Extract `ffmpeg.exe`.
+    - **CRITICAL STEP:** Rename it to match the Tauri Target Triple:
+      - Rename to: `ffmpeg-x86_64-pc-windows-msvc.exe`
+    - Place it in: `src-tauri/binaries/` (Create folder if missing).
+2.  **Tauri Config:** Ensure `tauri.conf.json` includes:
+    ```json
+    "bundle": {
+      "externalBin": ["binaries/ffmpeg"]
+    }
+    ```
+
+### 7.2 Building the Installer
+
+Run the build command in your terminal:
+
+```bash
+npm run tauri build
+```
+
+**What happens next?**
+
+1.  Tauri compiles the Rust backend (`release` mode).
+2.  Vite builds the React frontend.
+3.  Tauri bundles them into a Windows Installer (`.msi` or `.exe`).
+
+### 7.3 Output Location
+
+The final installer will be located here:
+`src-tauri/target/release/bundle/msi/LastLook_2.0.0_x64_en-US.msi`
+
+You can share this `.msi` file with anyone. It is a standalone installer that includes the app and the FFmpeg engine.
+
+---
+
+## 8. Implementation Roadmap
 
 ### ✅ Phase 1: Foundation (Completed)
 

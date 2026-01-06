@@ -1,135 +1,266 @@
-import { useState, useEffect } from "react";
-import { stat } from "@tauri-apps/plugin-fs";
+import { useEffect, useState } from "react";
 import { useAppStore } from "../store/appStore";
-import { formatSize, formatDate } from "../utils/formatters"; // <--- IMPORT
+import { formatSize, formatDate } from "../utils/formatters";
+import { invoke } from "@tauri-apps/api/core";
+import { useMedia } from "../hooks/useMedia";
 
-// FAIL-SAFE TYPE
-type FileStat = Awaited<ReturnType<typeof stat>>;
+interface FileMetadata {
+  size: number;
+  created?: number;
+  modified?: number;
+}
 
 export function Inspector() {
-  const { selectedFile, sourcePath, checkedFiles } = useAppStore();
+  const {
+    selectedFile,
+    selectedFileOrigin,
+    sourcePath,
+    destPath,
+    checkedFiles,
+    setSelectedFile,
+  } = useAppStore();
 
-  // STATE
-  const [meta, setMeta] = useState<FileStat | null>(null);
+  const [metadata, setMetadata] = useState<FileMetadata | null>(null);
+
+  // Batch State
   const [batchSize, setBatchSize] = useState<number>(0);
-  const [isCalculating, setIsCalculating] = useState(false);
+  const [isBatchLoading, setIsBatchLoading] = useState(false);
 
-  // Effect: Single File
+  // 1. Construct Full Path for Preview
+  const rootPath = selectedFileOrigin === "dest" ? destPath : sourcePath;
+  const fullPath =
+    selectedFile && rootPath ? `${rootPath}\\${selectedFile.name}` : null;
+
+  // 2. Use the Media Hook
+  const { thumbnailUrl, isLoading } = useMedia(fullPath);
+
+  // 3. Fetch Metadata (Single File)
   useEffect(() => {
-    async function fetchMeta() {
-      if (!selectedFile || !sourcePath) return;
-      setMeta(null);
-      try {
-        const separator = sourcePath.endsWith("\\") ? "" : "\\";
-        const data = await stat(
-          `${sourcePath}${separator}${selectedFile.name}`
-        );
-        setMeta(data);
-      } catch {
-        /* ignore */
-      }
+    if (!selectedFile || !rootPath) {
+      setMetadata(null);
+      return;
     }
-    fetchMeta();
-  }, [selectedFile, sourcePath]);
 
-  // Effect: Batch Size
-  useEffect(() => {
-    async function calculateBatch() {
-      if (checkedFiles.size === 0 || !sourcePath) {
-        setBatchSize(0);
-        return;
-      }
-      setIsCalculating(true);
-
-      const promises = Array.from(checkedFiles).map(async (filename) => {
-        try {
-          const separator = sourcePath.endsWith("\\") ? "" : "\\";
-          const info = await stat(`${sourcePath}${separator}${filename}`);
-          return info.size;
-        } catch {
-          return 0;
-        }
+    invoke("plugin:fs|stat", { path: fullPath })
+      .then((stat: any) => {
+        setMetadata({
+          size: stat.size,
+          created: stat.birthtime,
+          modified: stat.mtime,
+        });
+      })
+      .catch((err) => {
+        console.error("Failed to stat file:", err);
+        setMetadata(null);
       });
+  }, [selectedFile, rootPath, fullPath]);
 
-      const sizes = await Promise.all(promises);
-      setBatchSize(sizes.reduce((acc, curr) => acc + curr, 0));
-      setIsCalculating(false);
+  // 4. Batch Calculation (Always run if checkedFiles exist)
+  useEffect(() => {
+    if (checkedFiles.size > 0 && sourcePath) {
+      setIsBatchLoading(true);
+
+      const promises = Array.from(checkedFiles).map((filename) =>
+        invoke("plugin:fs|stat", { path: `${sourcePath}\\${filename}` })
+          .then((stat: any) => stat.size as number)
+          .catch(() => 0)
+      );
+
+      Promise.all(promises)
+        .then((sizes) => {
+          const total = sizes.reduce((acc, curr) => acc + curr, 0);
+          setBatchSize(total);
+        })
+        .finally(() => setIsBatchLoading(false));
+    } else {
+      setBatchSize(0);
     }
-    const timer = setTimeout(calculateBatch, 200);
-    return () => clearTimeout(timer);
-  }, [checkedFiles, sourcePath]);
+  }, [checkedFiles, sourcePath]); // Removed selectedFile dependency so it persists
 
-  // --- RENDER ---
-  return (
-    <div className="flex-1 p-4 flex flex-col gap-6">
-      {/* 1. BATCH SUMMARY */}
-      {checkedFiles.size > 0 && (
-        <div className="bg-zinc-800/50 p-4 rounded-lg border border-zinc-700/50 space-y-3 animate-in fade-in slide-in-from-top-2">
-          <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
-            Batch Selection
-          </h3>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <p className="text-[10px] text-zinc-500 font-bold">Items</p>
-              <p className="text-xl text-emerald-400 font-mono">
-                {checkedFiles.size}
-              </p>
-            </div>
-            <div>
-              <p className="text-[10px] text-zinc-500 font-bold">Total Size</p>
-              <p className="text-xl text-zinc-200 font-mono">
-                {isCalculating ? "..." : formatSize(batchSize)}
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
+  // --- SUB-COMPONENTS ---
 
-      {/* 2. SINGLE FILE */}
+  const BatchHeader = () => (
+    <div
+      onClick={() => setSelectedFile(null)} // Click header to go back to full batch view
+      className={`shrink-0 border-b border-zinc-800 transition-colors cursor-pointer group
+            ${
+              selectedFile
+                ? "bg-zinc-900/80 hover:bg-zinc-800 py-3 px-4"
+                : "h-64 bg-zinc-950 flex flex-col items-center justify-center gap-3"
+            }
+        `}
+    >
       {selectedFile ? (
-        <div className="space-y-4 animate-in fade-in duration-300">
-          <div className="w-full aspect-video bg-zinc-900 rounded-lg flex items-center justify-center border border-zinc-800 shadow-inner">
-            <span className="text-4xl select-none filter drop-shadow-lg">
-              {selectedFile.isDirectory ? "📁" : "🎬"}
+        // COMPACT HEADER (Shown when a file is also selected)
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]" />
+            <span className="text-xs font-bold text-blue-400 uppercase tracking-wide">
+              Batch Active
             </span>
           </div>
-          <div>
-            <p className="text-[10px] text-zinc-500 uppercase tracking-wider font-bold">
-              Filename
-            </p>
-            <p className="text-sm text-zinc-100 font-medium break-all leading-tight mt-1">
-              {selectedFile.name}
+          <div className="text-right">
+            <p className="text-xs text-zinc-300 font-mono">
+              {checkedFiles.size} Files
+              <span className="text-zinc-600 mx-1">|</span>
+              {isBatchLoading ? "..." : formatSize(batchSize)}
             </p>
           </div>
-          {meta && (
-            <div className="grid grid-cols-2 gap-4 pt-4 border-t border-zinc-800">
-              <div>
-                <p className="text-[10px] text-zinc-500 uppercase tracking-wider font-bold">
-                  Size
-                </p>
-                <p className="text-sm text-zinc-300 font-mono mt-1">
-                  {formatSize(meta.size)}
-                </p>
-              </div>
-              <div>
-                <p className="text-[10px] text-zinc-500 uppercase tracking-wider font-bold">
-                  Modified
-                </p>
-                <p className="text-sm text-zinc-300 font-mono mt-1">
-                  {formatDate(meta.mtime)}
-                </p>
-              </div>
-            </div>
-          )}
         </div>
       ) : (
-        /* 3. EMPTY STATE */
-        checkedFiles.size === 0 && (
-          <div className="flex-1 flex flex-col items-center justify-center opacity-30">
-            <p className="text-4xl mb-2">🔍</p>
-            <p className="text-xs">Select a file to inspect</p>
+        // FULL HERO (Shown when ONLY batch is active)
+        <>
+          <div className="w-16 h-16 rounded-full bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.2)]">
+            <svg
+              className="w-8 h-8"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"
+              />
+            </svg>
           </div>
-        )
+          <div className="text-center">
+            <h2 className="text-lg font-bold text-zinc-100">Batch Ready</h2>
+            <p className="text-sm text-blue-400 font-mono mt-1">
+              {checkedFiles.size} files selected
+            </p>
+            <p className="text-xs text-zinc-500 font-mono mt-1">
+              Total: {isBatchLoading ? "Calculating..." : formatSize(batchSize)}
+            </p>
+          </div>
+        </>
+      )}
+    </div>
+  );
+
+  const FilePreview = () => (
+    <>
+      {/* --- PREVIEW AREA --- */}
+      <div className="h-64 bg-zinc-950 flex items-center justify-center border-b border-zinc-800 relative group overflow-hidden shrink-0">
+        {isLoading ? (
+          <div className="flex flex-col items-center gap-2">
+            <div className="w-6 h-6 border-2 border-zinc-700 border-t-zinc-400 rounded-full animate-spin" />
+            <span className="text-xs text-zinc-500">Generating Preview...</span>
+          </div>
+        ) : thumbnailUrl ? (
+          <img
+            src={thumbnailUrl}
+            alt="Preview"
+            className="w-full h-full object-contain"
+          />
+        ) : (
+          <svg
+            className="w-20 h-20 text-zinc-800"
+            fill="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path d="M4 4h16v16H4V4zm2 2v12h12V6H6zm3 4h6v2H9v-2zm0 4h4v2H9v-2z" />
+          </svg>
+        )}
+
+        {/* Origin Badge */}
+        <div
+          className={`absolute top-2 right-2 px-2 py-0.5 rounded text-[10px] font-bold border backdrop-blur-md shadow-sm ${
+            selectedFileOrigin === "dest"
+              ? "bg-zinc-900/80 text-zinc-400 border-zinc-700"
+              : "bg-emerald-900/80 text-emerald-400 border-emerald-500/30"
+          }`}
+        >
+          {selectedFileOrigin === "dest" ? "DESTINATION" : "SOURCE"}
+        </div>
+      </div>
+
+      {/* --- METADATA LIST --- */}
+      <div className="p-6 space-y-6 overflow-y-auto bg-zinc-900/30 flex-1">
+        <div>
+          <h2 className="text-lg font-bold text-zinc-100 break-all leading-tight">
+            {selectedFile!.name}
+          </h2>
+          <p className="text-xs text-zinc-500 font-mono mt-1 uppercase tracking-wider">
+            {selectedFile!.isDirectory
+              ? "Directory"
+              : selectedFile!.name.split(".").pop()}
+          </p>
+        </div>
+
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="p-3 bg-zinc-900/50 rounded border border-zinc-800/50">
+              <span className="text-[10px] uppercase text-zinc-500 font-bold block mb-1">
+                File Size
+              </span>
+              <span className="text-sm font-mono text-zinc-300">
+                {metadata ? formatSize(metadata.size) : "---"}
+              </span>
+            </div>
+            <div className="p-3 bg-zinc-900/50 rounded border border-zinc-800/50">
+              <span className="text-[10px] uppercase text-zinc-500 font-bold block mb-1">
+                Type
+              </span>
+              <span className="text-sm font-mono text-zinc-300">
+                {selectedFile!.isFile ? "File" : "Folder"}
+              </span>
+            </div>
+          </div>
+
+          <div className="space-y-3 pt-2">
+            <div className="flex justify-between border-b border-zinc-800/50 pb-2">
+              <span className="text-xs text-zinc-500">Created</span>
+              <span className="text-xs font-mono text-zinc-400">
+                {metadata?.created
+                  ? formatDate(new Date(metadata.created))
+                  : "---"}
+              </span>
+            </div>
+            <div className="flex justify-between border-b border-zinc-800/50 pb-2">
+              <span className="text-xs text-zinc-500">Modified</span>
+              <span className="text-xs font-mono text-zinc-400">
+                {metadata?.modified
+                  ? formatDate(new Date(metadata.modified))
+                  : "---"}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+
+  // --- MAIN RENDER ---
+  return (
+    <div className="flex-1 flex flex-col h-full min-h-0 bg-zinc-900/30 border-l border-zinc-800">
+      {/* 1. If we have a batch, ALWAYS show the header (Compact or Full) */}
+      {checkedFiles.size > 0 && <BatchHeader />}
+
+      {/* 2. If we have a selection, Show Preview (stacked under header) */}
+      {selectedFile && <FilePreview />}
+
+      {/* 3. Empty State (No Batch, No Selection) */}
+      {!selectedFile && checkedFiles.size === 0 && (
+        <div className="flex-1 flex flex-col items-center justify-center text-zinc-600 p-8 text-center">
+          <div className="w-16 h-16 mb-4 rounded-full bg-zinc-900/50 border border-zinc-800 flex items-center justify-center">
+            <svg
+              className="w-8 h-8 opacity-50"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+          </div>
+          <p className="text-sm">Select a file to inspect details</p>
+        </div>
       )}
     </div>
   );

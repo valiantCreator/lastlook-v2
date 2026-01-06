@@ -46,11 +46,6 @@ function App() {
     progress,
   } = useTransfer();
 
-  // 1. INITIAL SETUP
-  useEffect(() => {
-    invoke("verify_connection", { name: "LastLook UI" }).catch(console.error);
-  }, []);
-
   // 2. AUTO-SCAN TRIGGERS
   useEffect(() => {
     if (sourcePath) scanSource();

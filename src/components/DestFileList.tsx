@@ -41,9 +41,16 @@ export function DestFileList({ files }: DestFileListProps) {
   }
 
   return (
-    <div className="flex-1 flex flex-col min-h-0">
+    <div
+      className="flex-1 flex flex-col min-h-0"
+      // CHANGE: Clicking the empty background deselects the file
+      onClick={() => setSelectedFile(null)}
+    >
       {/* FILTER TOOLBAR (Sticky Top) */}
-      <div className="px-2 py-1.5 border-b border-zinc-800/50 bg-zinc-900/50 flex justify-end shrink-0">
+      <div
+        className="px-2 py-1.5 border-b border-zinc-800/50 bg-zinc-900/50 flex justify-end shrink-0"
+        onClick={(e) => e.stopPropagation()} // Prevent toolbar clicks from deselecting
+      >
         <label className="flex items-center gap-2 cursor-pointer group">
           <span className="text-[9px] uppercase font-bold text-zinc-500 group-hover:text-zinc-300 transition-colors">
             Hide Orphans
@@ -78,13 +85,19 @@ export function DestFileList({ files }: DestFileListProps) {
             <div
               key={filename}
               ref={isSelected ? activeRef : null}
-              onClick={() => {
-                setSelectedFile({
-                  name: filename,
-                  isDirectory: false,
-                  isFile: true,
-                  isSymlink: false,
-                });
+              onClick={(e) => {
+                // CHANGE: Stop propagation so row click doesn't trigger background deselect
+                e.stopPropagation();
+                // CHANGE: Explicitly pass "dest" origin
+                setSelectedFile(
+                  {
+                    name: filename,
+                    isDirectory: false,
+                    isFile: true,
+                    isSymlink: false,
+                  },
+                  "dest"
+                );
               }}
               className={`
                   flex items-center gap-3 p-2 rounded cursor-pointer transition-all duration-200 border
