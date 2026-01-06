@@ -1,133 +1,127 @@
-import { forwardRef } from "react";
+import { useEffect, useRef } from "react";
 import { DirEntry } from "@tauri-apps/plugin-fs";
+import { useAppStore } from "../store/appStore";
+import { FileRow } from "./FileRow";
 
-export interface FileRowProps {
-  file: DirEntry;
-  isSynced: boolean;
-  isVerified: boolean;
-  isVerifying: boolean;
-  hasDest: boolean;
-  isSelected: boolean;
-  isChecked: boolean;
-  // UPDATE: Now accepts the MouseEvent
-  onSelect: (e: React.MouseEvent) => void;
-  onCheck: () => void;
+interface FileListProps {
+  sourcePath: string | null;
+  files: DirEntry[];
+  destFiles: Set<string>;
+  onSelectSource: () => void;
+  onClearSource: () => void;
 }
 
-export const FileRow = forwardRef<HTMLDivElement, FileRowProps>(
-  (
-    {
-      file,
-      isSynced,
-      isVerified,
-      isVerifying,
-      hasDest,
-      isSelected,
-      isChecked,
-      onSelect,
-      onCheck,
-    },
-    ref
-  ) => {
+export function FileList({
+  sourcePath,
+  files,
+  destFiles,
+  onSelectSource,
+  onClearSource,
+}: FileListProps) {
+  const {
+    selectedFile,
+    setSelectedFile,
+    verifiedFiles,
+    verifyingFiles,
+    checkedFiles,
+    toggleChecked,
+    checkAllMissing,
+    destPath,
+  } = useAppStore();
+
+  const activeRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (activeRef.current) {
+      activeRef.current.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+      });
+    }
+  }, [selectedFile]);
+
+  if (!sourcePath) {
     return (
-      <div
-        ref={ref}
-        // UPDATE: Pass the event 'e' to onSelect
-        onClick={(e) => onSelect(e)}
-        className={`
-          group flex items-center gap-3 p-2 rounded cursor-pointer transition-all duration-200 border
-          ${
-            isSelected
-              ? "bg-zinc-800 border-zinc-700 shadow-md ring-1 ring-zinc-700 z-10 relative"
-              : "border-transparent hover:bg-zinc-800/30 opacity-60 hover:opacity-100"
-          }
-        `}
-      >
-        {/* CHECKBOX AREA */}
-        <div
-          onClick={(e) => {
-            e.stopPropagation();
-            onCheck();
-          }}
-          className="p-1 -m-1 hover:bg-zinc-700 rounded transition-colors"
+      <div className="flex-1 flex flex-col items-center justify-center p-4">
+        <button
+          onClick={onSelectSource}
+          className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-4 py-2 rounded-md text-sm border border-zinc-700 transition-all cursor-pointer shadow-lg active:scale-95"
         >
-          <div
-            className={`
-              w-3.5 h-3.5 rounded border flex items-center justify-center transition-all
-              ${
-                isChecked
-                  ? "bg-blue-500 border-blue-500 shadow-sm shadow-blue-500/20"
-                  : "bg-zinc-900/50 border-zinc-700 group-hover:border-zinc-500"
-              }
-            `}
-          >
-            {isChecked && (
-              <svg
-                className="w-2.5 h-2.5 text-white"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={3}
-                  d="M5 13l4 4L19 7"
-                />
-              </svg>
-            )}
-          </div>
-        </div>
-
-        {/* STATUS DOT */}
-        <div
-          className={`w-2 h-2 rounded-full shadow-sm shrink-0 transition-colors duration-300
-            ${
-              !hasDest
-                ? "bg-zinc-600 shadow-zinc-900/50" // Neutral
-                : isVerified
-                ? "bg-emerald-500 shadow-emerald-500/50" // Verified (Shield)
-                : isVerifying
-                ? "bg-yellow-500 shadow-yellow-500/50 animate-pulse" // Verifying
-                : isSynced
-                ? "bg-emerald-500/50 shadow-emerald-900/20" // Exists but not verified
-                : "bg-red-500 shadow-red-900/50" // Missing
-            }
-          `}
-        />
-
-        {/* FILE NAME */}
-        <div className="flex-1 min-w-0 flex items-center gap-2">
-          <span
-            className={`text-xs truncate font-medium transition-colors ${
-              isSelected
-                ? "text-white"
-                : "text-zinc-400 group-hover:text-zinc-300"
-            }`}
-          >
-            {file.name}
-          </span>
-          {/* Verified Shield Icon */}
-          {isVerified && (
-            <svg
-              className="w-3 h-3 text-emerald-500 shrink-0"
-              viewBox="0 0 20 20"
-              fill="currentColor"
-            >
-              <path
-                fillRule="evenodd"
-                d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                clipRule="evenodd"
-              />
-            </svg>
-          )}
-        </div>
-
-        {/* FILE EXTENSION / TYPE */}
-        <span className="text-[9px] text-zinc-600 font-mono uppercase tracking-wider shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-          {file.isDirectory ? "DIR" : file.name.split(".").pop()?.slice(0, 4)}
-        </span>
+          + Select Source
+        </button>
+        <p className="mt-2 text-xs text-zinc-600">Choose SD Card or Drive</p>
       </div>
     );
   }
-);
+
+  if (files.length === 0) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center opacity-50">
+        <p className="text-xs text-zinc-500">Folder is empty</p>
+        <button
+          onClick={onClearSource}
+          className="mt-2 text-[10px] text-zinc-600 hover:text-zinc-400 underline cursor-pointer"
+        >
+          Change Source
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="flex-1 flex flex-col h-full min-h-0"
+      onClick={() => setSelectedFile(null)}
+    >
+      <div className="flex-1 overflow-y-auto p-2 space-y-1 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent">
+        {files.map((file) => (
+          <FileRow
+            key={file.name}
+            ref={selectedFile?.name === file.name ? activeRef : null}
+            file={file}
+            isSynced={destFiles.has(file.name)}
+            isVerified={verifiedFiles.has(file.name)}
+            isVerifying={verifyingFiles.has(file.name)}
+            hasDest={!!destPath}
+            isSelected={selectedFile?.name === file.name}
+            isChecked={checkedFiles.has(file.name)}
+            onSelect={(e: React.MouseEvent) => {
+              e.stopPropagation();
+              setSelectedFile(file, "source");
+            }}
+            onCheck={() => toggleChecked(file.name)}
+          />
+        ))}
+      </div>
+
+      <div className="p-3 bg-zinc-900 border-t border-zinc-800 flex justify-between items-center shrink-0">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            checkAllMissing();
+          }}
+          disabled={!destPath}
+          className={`text-[10px] px-3 py-1.5 rounded border transition-colors cursor-pointer
+              ${
+                !destPath
+                  ? "bg-zinc-800/50 text-zinc-600 border-zinc-800 cursor-not-allowed"
+                  : "bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border-zinc-700"
+              }
+            `}
+        >
+          Select All Missing Files
+        </button>
+
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onClearSource();
+          }}
+          className="text-[10px] text-zinc-500 hover:text-zinc-300 underline cursor-pointer"
+        >
+          Change Source
+        </button>
+      </div>
+    </div>
+  );
+}

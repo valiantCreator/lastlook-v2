@@ -1,4 +1,4 @@
-import { forwardRef } from "react";
+import { forwardRef, MouseEvent } from "react";
 import { DirEntry } from "@tauri-apps/plugin-fs";
 
 interface FileRowProps {
@@ -9,7 +9,8 @@ interface FileRowProps {
   hasDest: boolean;
   isSelected: boolean;
   isChecked: boolean;
-  onSelect: () => void;
+  // UPDATE: Now explicitly accepts the MouseEvent
+  onSelect: (e: MouseEvent) => void;
   onCheck: () => void;
 }
 
@@ -41,8 +42,9 @@ export const FileRow = forwardRef<HTMLDivElement, FileRowProps>(
 
     return (
       <div
-        ref={ref} // <--- ATTACH REF HERE
-        onClick={onSelect}
+        ref={ref}
+        // UPDATE: Pass the event 'e' to the handler
+        onClick={(e) => onSelect(e)}
         className={`
         flex items-center gap-3 p-2 rounded cursor-pointer group transition-all duration-300 border select-none w-full
         ${rowStyle}
