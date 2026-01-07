@@ -192,7 +192,8 @@ function App() {
       </div>
 
       {/* --- RIGHT PANEL: INSPECTOR --- */}
-      <div className="w-[300px] border-l border-zinc-800 flex flex-col bg-zinc-900/30 shrink-0">
+      {/* UPDATE: Increased width from w-[300px] to w-[400px] for better metadata display */}
+      <div className="w-[400px] border-l border-zinc-800 flex flex-col bg-zinc-900/30 shrink-0">
         <div className="h-12 border-b border-zinc-800 flex items-center px-4 bg-zinc-900/50 shrink-0">
           <span className="font-bold text-sm tracking-wide text-zinc-100">
             INSPECTOR

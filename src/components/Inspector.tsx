@@ -10,6 +10,15 @@ interface FileMetadata {
   modified?: number;
 }
 
+// --- NEW INTERFACE FOR VIDEO INFO ---
+interface VideoMetadata {
+  width: number;
+  height: number;
+  duration: number;
+  codec: string;
+  fps: string;
+}
+
 export function Inspector() {
   const {
     selectedFile,
@@ -21,6 +30,7 @@ export function Inspector() {
   } = useAppStore();
 
   const [metadata, setMetadata] = useState<FileMetadata | null>(null);
+  const [videoMeta, setVideoMeta] = useState<VideoMetadata | null>(null); // <--- NEW STATE
 
   // Batch State
   const [batchSize, setBatchSize] = useState<number>(0);
@@ -55,7 +65,25 @@ export function Inspector() {
       });
   }, [selectedFile, rootPath, fullPath]);
 
-  // 4. Batch Calculation (Always run if checkedFiles exist)
+  // 4. Fetch Video Metadata (New Phase 8 Logic)
+  useEffect(() => {
+    setVideoMeta(null); // Reset when file changes
+    if (!selectedFile || !rootPath || !fullPath) return;
+
+    // Simple extension check to avoid running ffprobe on non-video files
+    const isVideo = /\.(mp4|mov|mkv|avi|webm)$/i.test(selectedFile.name);
+
+    if (isVideo) {
+      invoke<VideoMetadata>("get_video_metadata", { path: fullPath })
+        .then(setVideoMeta)
+        .catch((e) => {
+          // It's okay if this fails (e.g. corrupt video or missing ffprobe), we just won't show the extra info
+          console.warn("Failed to get video meta:", e);
+        });
+    }
+  }, [selectedFile, rootPath, fullPath]);
+
+  // 5. Batch Calculation (Always run if checkedFiles exist)
   useEffect(() => {
     if (checkedFiles.size > 0 && sourcePath) {
       setIsBatchLoading(true);
@@ -75,7 +103,7 @@ export function Inspector() {
     } else {
       setBatchSize(0);
     }
-  }, [checkedFiles, sourcePath]); // Removed selectedFile dependency so it persists
+  }, [checkedFiles, sourcePath]);
 
   // --- SUB-COMPONENTS ---
 
@@ -208,6 +236,33 @@ export function Inspector() {
               </span>
             </div>
           </div>
+
+          {/* --- NEW: MEDIA METADATA BLOCK --- */}
+          {videoMeta && (
+            <div className="grid grid-cols-2 gap-4 pt-2 border-t border-zinc-800/50">
+              <div className="p-3 bg-zinc-900/50 rounded border border-zinc-800/50">
+                <span className="text-[10px] uppercase text-zinc-500 font-bold block mb-1">
+                  Resolution
+                </span>
+                <span className="text-sm font-mono text-zinc-300">
+                  {videoMeta.width} x {videoMeta.height}
+                </span>
+              </div>
+              <div className="p-3 bg-zinc-900/50 rounded border border-zinc-800/50 min-w-0">
+                <span className="text-[10px] uppercase text-zinc-500 font-bold block mb-1">
+                  Format
+                </span>
+                {/* FIX: Added 'truncate' and 'block' to handle overflow cleanly */}
+                <span
+                  className="text-sm font-mono text-zinc-300 whitespace-nowrap truncate block"
+                  title={`${videoMeta.fps} fps | ${videoMeta.codec}`}
+                >
+                  {videoMeta.fps} fps <span className="text-zinc-600">|</span>{" "}
+                  {videoMeta.codec}
+                </span>
+              </div>
+            </div>
+          )}
 
           <div className="space-y-3 pt-2">
             <div className="flex justify-between border-b border-zinc-800/50 pb-2">
