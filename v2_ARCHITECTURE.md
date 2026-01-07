@@ -1,18 +1,19 @@
 # LastLook v2.0: Architecture & Technical Specs
 
-**Status:** Beta (Data Logic & Filters - Sprint 2 Complete)
+**Status:** Release Candidate 1 (Visualizer & Hybrid Inspector - Phase 8 Complete)
 **Stack:** Tauri (Rust) + React (TypeScript) + Tailwind CSS + Zustand
-**Date:** January 5, 2026
+**Date:** January 6, 2026
 
 ---
 
 ## 1. High-Level Architecture
 
-LastLook v2 uses a **Hybrid Architecture**:
+LastLook v2 uses a **Hybrid Architecture** enhanced with a **Sidecar Pattern**:
 
 1.  **Frontend (The Face):** A React Single Page Application (SPA).
-2.  **Backend (The Muscle):** A Rust binary acting as the "Sidecar" for File I/O.
-3.  **State (The Brain):** A Global Zustand Store (`appStore`) that creates a Single Source of Truth.
+2.  **Backend (The Muscle):** A Rust binary handling IO, Hashing, and Threading.
+3.  **Sidecar (The Eyes):** An external **FFmpeg** binary managed by Tauri to generate media thumbnails.
+4.  **State (The Brain):** A Global Zustand Store (`appStore`) acting as the Single Source of Truth.
 
 ### The Stack
 
@@ -20,6 +21,7 @@ LastLook v2 uses a **Hybrid Architecture**:
 - **Build Tool:** Vite
 - **Styling:** Tailwind CSS v4.0
 - **State:** Zustand
+- **Media Engine:** FFmpeg (Static Binary)
 
 ---
 
@@ -29,14 +31,15 @@ LastLook v2 uses a **Hybrid Architecture**:
 
 _Files that control the build environment._
 
-| File                     | Purpose                                                                 | Dependencies           |
-| :----------------------- | :---------------------------------------------------------------------- | :--------------------- |
-| **`package.json`**       | Defines project scripts (`dev`, `build`) and installed libraries.       | Node.js                |
-| **`vite.config.ts`**     | Configures the Vite build server. Handles Hot Module Replacement (HMR). | `vite`, `tauri`        |
-| **`tsconfig.json`**      | Rules for the TypeScript compiler (strict mode, target version).        | TypeScript             |
-| **`tailwind.config.js`** | Configures Tailwind's theme and content scanner.                        | Tailwind CSS           |
-| **`postcss.config.js`**  | Configures the CSS post-processor (required for Tailwind v4).           | `@tailwindcss/postcss` |
-| **`index.html`**         | The HTML entry point that loads the React JavaScript bundle.            | -                      |
+| File                            | Purpose                                                                            | Dependencies           |
+| :------------------------------ | :--------------------------------------------------------------------------------- | :--------------------- |
+| **`package.json`**              | Defines project scripts (`dev`, `build`) and installed libraries.                  | Node.js                |
+| **`vite.config.ts`**            | Configures the Vite build server. Handles Hot Module Replacement (HMR).            | `vite`, `tauri`        |
+| **`tsconfig.json`**             | Rules for the TypeScript compiler (strict mode, target version).                   | TypeScript             |
+| **`tailwind.config.js`**        | Configures Tailwind's theme and content scanner.                                   | Tailwind CSS           |
+| **`postcss.config.js`**         | Configures the CSS post-processor (required for Tailwind v4).                      | `@tailwindcss/postcss` |
+| **`index.html`**                | The HTML entry point that loads the React JavaScript bundle.                       | -                      |
+| **`src-tauri/tauri.conf.json`** | **CRITICAL:** Configures `assetProtocol` (Scope: `**`) and `externalBin` (FFmpeg). | Tauri Core             |
 
 ### 2.2 Source Code (`src/`)
 
@@ -60,18 +63,23 @@ _Pure UI elements (Presentation Layer)._
 
 - **`FileList.tsx`**
   - **Purpose:** Renders the scrollable list of source files OR the "Select Source" empty state. Passes `hasDest` state to rows.
-  - **Updated Logic:** Implements "Snap-To" scrolling via `block: "nearest"` to prevent window shifting.
+  - **Updated Logic:** Handles background clicks to deselect files. Explicitly sets origin to `"source"` to context-switch the Inspector. Implements "Snap-To" scrolling via `block: "nearest"`.
   - **Dependencies:** `FileRow.tsx`, `DirEntry` (type), `appStore`
 - **`DestFileList.tsx`**
   - **Purpose:** Renders the destination file list. Supports auto-scrolling, synced highlighting, and neutral state (Grey dots) when no Source is active.
-  - **Updated Logic:** Differentiates between Synced (Green) and Orphan (Red) files. Includes "Hide Orphans" filter toggle.
+  - **Updated Logic:** Handles background clicks to deselect files. Explicitly sets origin to `"dest"`. Differentiates between Synced (Green) and Orphan (Red) files. Includes "Hide Orphans" filter toggle.
   - **Dependencies:** `appStore`
 - **`FileRow.tsx`**
   - **Purpose:** Renders a single file row. Contains the "Traffic Light" logic (Green/Yellow/Red/Grey dot), Checkboxes, and click handlers. Wrapped in `forwardRef`.
+  - **Updated Logic:** Now accepts `MouseEvent` to handle `stopPropagation` (preventing immediate deselection when clicking a row).
   - **Dependencies:** `DirEntry` (type)
 - **`Inspector.tsx`**
-  - **Purpose:** Displays metadata (Size, Date, Preview) for the currently selected file. Handles `fs.stat` calls and batch size calculations.
-  - **Dependencies:** `appStore`, `@tauri-apps/plugin-fs`
+  - **Purpose:** The "Hybrid" details panel. Displays metadata (Size, Date) and Media Previews.
+  - **Updated Logic:**
+    - **Hybrid Mode:** Stacks a "Batch Header" (showing total selection size) and a "File Preview" if both are active simultaneously.
+    - **Asset Protocol:** Loads images via `asset://localhost/...` urls.
+    - **Origin Tracking:** Uses `selectedFileOrigin` to correctly resolve paths from Source vs Dest.
+  - **Dependencies:** `appStore`, `@tauri-apps/plugin-fs`, `useMedia`
 - **`ConflictModal.tsx`**
   - **Purpose:** A modal dialog that appears when source files already exist in the destination. Offers options to "Overwrite All", "Skip Existing", or "Cancel".
   - **Dependencies:** None (Pure UI)
@@ -90,6 +98,11 @@ _Reusable Logic Layer._
 - **`useTransfer.ts`**
   - **Purpose:** The Controller. Manages the transfer loop, listens for Rust events (`transfer-progress`, `transfer-verifying`), handles Cancellation logic, performs Pre-Flight Conflict Checks, calculates Live Math (Speed/ETA), and enforces batch selection rules.
   - **Dependencies:** `appStore`, `@tauri-apps/api/core`
+- **`useMedia.ts`** (New in Phase 8)
+  - **Purpose:** The Media Handler. Checks file extensions to determine preview strategy.
+    - **Images:** Converts path to Asset URL directly.
+    - **Videos:** Invokes Rust `generate_thumbnail` command to run FFmpeg, then converts the result to an Asset URL.
+  - **Dependencies:** `@tauri-apps/api/core` (invoke, convertFileSrc)
 
 #### Store (`src/store/`)
 
@@ -97,7 +110,9 @@ _Global State Management._
 
 - **`appStore.ts`**
   - **Purpose:** The Single Source of Truth. Holds `sourcePath`, `destPath`, `fileList`, `destFiles`, `verifiedFiles`, `verifyingFiles` (Amber State), `checkedFiles` (Batch), `conflicts` (Safety), `batchTotalBytes`, `completedBytes`, and `transferStartTime`.
-  - **Updated:** Includes `swapPaths` action which performs a full state reset to prevent ghost data.
+  - **Updated:**
+    - Includes `swapPaths` action which performs a full state reset to prevent ghost data.
+    - Tracks `selectedFileOrigin` ("source" vs "dest") to support the Inspector's context-aware logic.
   - **Dependencies:** `zustand`
 
 #### Utils (`src/utils/`)
@@ -114,12 +129,17 @@ _The Rust Core._
 
 - **`tauri.conf.json`**
   - **Purpose:** Configures window size, permissions, and bundle identifiers (`com.lastlook.app`). Defines `externalBin` for FFmpeg sidecar.
+- **`src-tauri/binaries/`**
+  - **Purpose:** Stores the platform-specific FFmpeg executable.
+  - **Files:** `ffmpeg-x86_64-pc-windows-msvc.exe`.
 - **`capabilities/default.json`**
   - **Purpose:** Security rules defining what the frontend is allowed to do.
   - **Permissions:**
     - `fs:default` (Read/Write files)
     - `fs:allow-stat` (Read Metadata like Size/Date)
     - `dialog:default` (Open System Pickers)
+    - `shell:allow-execute` (Execute FFmpeg sidecar)
+    - `fs:allow-read`: **Scope expanded** to include `$TEMP/**` (for reading generated thumbnails).
 - **`src/main.rs`**
   - **Purpose:** The Rust entry point. Spins up the WebView.
 - **`src/lib.rs`**
@@ -127,6 +147,7 @@ _The Rust Core._
     - `calculate_hash`: High-performance xxHash (xxh3) check using 64MB buffers.
     - `copy_file`: Pipelined Transfer + Verification loop. Emits `transfer-verifying` event between phases. Resets abort flag on start.
     - `cancel_transfer`: Sets atomic flag to interrupt active transfers.
+    - `generate_thumbnail`: (New) Spawns FFmpeg sidecar to extract a frame at 00:01 and save it to `%TEMP%/lastlook_cache`.
 
 ---
 
@@ -145,6 +166,10 @@ interface AppState {
   destFiles: Set<string>; // Fast lookup for Destination presence
   checkedFiles: Set<string>; // Batch Selection (User clicked checkboxes)
 
+  // --- SELECTION CONTEXT ---
+  selectedFile: DirEntry | null;
+  selectedFileOrigin: "source" | "dest" | null; // <--- NEW: Tracks origin for Inspector
+
   // --- STATUS FLAGS ---
   verifiedFiles: Set<string>; // Files that passed xxHash check
   verifyingFiles: Set<string>; // Files currently hashing (Yellow UI)
@@ -158,27 +183,23 @@ interface AppState {
 
   // --- ACTIONS ---
   swapPaths: () => void; // Swaps Source/Dest and resets all lists
+  // ... setters ...
 }
 ```
 
 ---
 
-## 4. Data Flow
+## 4. Data Flow (Media Preview)
 
-1.  **Action:** User clicks "Select Source" in UI.
-2.  **Hook:** `useFileSystem.selectSource()` is called.
-3.  **Bridge:** Calls Tauri `dialog.open()`.
-4.  **Backend:** Rust opens Windows native picker.
-5.  **State:** Path is saved to `appStore`.
-6.  **Reaction:** `FileList` component re-renders. Dots appear **Grey** (Neutral) until Dest is selected.
-7.  **Action:** User clicks "Transfer".
-8.  **Logic:** `useTransfer` performs **Pre-Flight Check**.
-    - _Conflict:_ `ConflictModal` opens. User selects "Overwrite" or "Skip".
-    - _No Conflict:_ Transfer begins.
-9.  **Logic:** `useTransfer` calculates `batchTotalBytes` and sets `transferStartTime`.
-10. **Event:** Rust emits `transfer-progress` -> `JobDrawer` updates "Micro" bar (Green) and "Macro" bar (Blue) via Live Math.
-11. **Event:** Rust emits `transfer-verifying` -> `JobDrawer` updates UI to **Striped Yellow** (Verifying).
-12. **Completion:** Verification passes -> UI updates to **Green** dot + Shield.
+1.  **Action:** User clicks a video file in `FileList`.
+2.  **State:** `appStore` updates `selectedFile` and sets `selectedFileOrigin` to `"source"`.
+3.  **Reaction:** `Inspector` mounts and calls `useMedia(fullPath)`.
+4.  **Hook:** `useMedia` detects `.mp4` extension. Calls Rust `generate_thumbnail`.
+5.  **Rust:** Spawns `ffmpeg.exe` sidecar.
+    - _Command:_ `ffmpeg -y -i [input] -ss 00:00:01 -vframes 1 [temp_output.jpg]`
+6.  **Rust:** Returns the absolute path of the temp image to Frontend.
+7.  **Hook:** Converts path to `http://asset.localhost/...`.
+8.  **UI:** Browser fetches image (allowed by `assetProtocol` scope) and displays it.
 
 ---
 
@@ -186,7 +207,9 @@ interface AppState {
 
 - **`fs:allow-stat`**: Read-only access to file metadata (Size/Date).
 - **`fs:read/write`**: Explicitly scoped to the `sourcePath` and `destPath` selected by the user.
-- **`shell:allow-execute`**: (Upcoming Phase 8) Required for `ffmpeg` sidecar execution.
+- **`fs:allow-read`**: Scope expanded to `$TEMP/**` to allow reading cached thumbnails.
+- **`shell:allow-execute`**: Explicitly allows running the bundled `ffmpeg` binary.
+- **`assetProtocol`**: Enabled with scope `["**"]` to allow rendering local images in the WebView.
 
 ---
 
@@ -321,11 +344,14 @@ _Goal: Address User Feedback, Fix Layout Glitches, and Improve Data Visualizatio
 - [x] **Destination Filters:** Add a toggle to `DestFileList` to show "All Files" vs "Synced Only".
 - [x] **Empty Space Fix:** Ensure the bottom of the application is properly sealed so scrolling doesn't reveal the "void" beneath the UI.
 
-### 🔮 Phase 8: The Visualizer
+### ✅ Phase 8: The Visualizer (Completed)
 
 _Goal: Media features powered by FFmpeg._
 
-- [ ] **Sidecar Binary Integration:** Bundle `ffmpeg.exe` and `ffprobe.exe` with the Tauri installer.
-- [ ] **Thumbnail Generator:** Create a background command to extract a frame at 00:01 and cache it for the Inspector.
+- [x] **Sidecar Binary Integration:** Bundle `ffmpeg.exe` with the Tauri installer.
+- [x] **Thumbnail Generator:** Create a background command to extract a frame at 00:01 and cache it for the Inspector.
+- [x] **Hybrid Inspector:** Updated Inspector UI to stack "Batch Header" and "File Preview" when both are active.
+- [x] **Security Upgrade:** Enabled `assetProtocol` to serve local images and `fs:allow-read` for temp cache access.
+- [x] **UX Polish:** Implemented "Click-to-Deselect" logic on file list backgrounds.
 - [ ] **Advanced Metadata:** Use `ffprobe` to extract Resolution, Codec, Bitrate, and Frame Rate info.
 - [ ] **Comparators:** A "Compare Mode" that places the Source and Destination files side-by-side visually to verify quality manually.

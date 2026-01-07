@@ -14,6 +14,31 @@ struct TransferState {
     abort_flag: Arc<AtomicBool>,
 }
 
+// --- METADATA STRUCTS (New for Phase 8) ---
+#[derive(serde::Serialize)]
+struct VideoMetadata {
+    width: u32,
+    height: u32,
+    duration: f64,
+    codec: String,
+    fps: String,
+}
+
+// Internal structs for parsing FFprobe JSON
+#[derive(serde::Deserialize)]
+struct FfprobeOutput {
+    streams: Vec<FfprobeStream>,
+}
+
+#[derive(serde::Deserialize)]
+struct FfprobeStream {
+    width: Option<u32>,
+    height: Option<u32>,
+    codec_name: Option<String>,
+    r_frame_rate: Option<String>,
+    duration: Option<String>,
+}
+
 // --- COMMANDS ---
 
 #[tauri::command]
@@ -173,7 +198,7 @@ async fn generate_thumbnail(app: AppHandle, path: String) -> Result<String, Stri
     while let Some(event) = rx.recv().await {
         match event {
             CommandEvent::Stderr(line) => {
-                // PRINT FFMPEG LOGS TO TERMINAL
+                // PRINT FFMPEG LOGS TO TERMINAL (Debugging)
                 println!("FFMPEG LOG: {}", String::from_utf8_lossy(&line)); 
             }
             CommandEvent::Terminated(payload) => {
@@ -190,6 +215,60 @@ async fn generate_thumbnail(app: AppHandle, path: String) -> Result<String, Stri
     Err("Unknown FFmpeg error".into())
 }
 
+// --- METADATA EXTRACTOR (New) ---
+#[tauri::command]
+async fn get_video_metadata(app: AppHandle, path: String) -> Result<VideoMetadata, String> {
+    
+    // Command: ffprobe -v error -select_streams v:0 -show_entries stream=... -of json [input]
+    let sidecar_command = app.shell().sidecar("ffprobe").map_err(|e| e.to_string())?
+        .args([
+            "-v", "error",
+            "-select_streams", "v:0", // Video stream only
+            "-show_entries", "stream=width,height,duration,r_frame_rate,codec_name",
+            "-of", "json", // Return JSON
+            &path
+        ]);
+
+    let (mut rx, _) = sidecar_command.spawn().map_err(|e| e.to_string())?;
+
+    let mut output_json = String::new();
+
+    // Collect all stdout lines into one JSON string
+    while let Some(event) = rx.recv().await {
+        if let CommandEvent::Stdout(line) = event {
+            output_json.push_str(&String::from_utf8_lossy(&line));
+        }
+    }
+
+    // Parse the JSON output
+    let parsed: FfprobeOutput = serde_json::from_str(&output_json)
+        .map_err(|e| format!("Failed to parse ffprobe output: {}", e))?;
+
+    if let Some(stream) = parsed.streams.first() {
+        // Calculate nice FPS (e.g., "30000/1001" -> "29.97")
+        let fps_str = stream.r_frame_rate.clone().unwrap_or_default();
+        let fps_calc = if let Some((num, den)) = fps_str.split_once('/') {
+            let n: f64 = num.parse().unwrap_or(0.0);
+            let d: f64 = den.parse().unwrap_or(1.0);
+            if d > 0.0 { format!("{:.2}", n / d) } else { fps_str }
+        } else {
+            fps_str
+        };
+
+        let duration_secs: f64 = stream.duration.clone().unwrap_or_default().parse().unwrap_or(0.0);
+
+        Ok(VideoMetadata {
+            width: stream.width.unwrap_or(0),
+            height: stream.height.unwrap_or(0),
+            duration: duration_secs,
+            codec: stream.codec_name.clone().unwrap_or("unknown".to_string()),
+            fps: fps_calc,
+        })
+    } else {
+        Err("No video stream found".to_string())
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -203,7 +282,8 @@ pub fn run() {
             copy_file, 
             calculate_hash, 
             cancel_transfer,
-            generate_thumbnail
+            generate_thumbnail,
+            get_video_metadata // <--- REGISTERED NEW COMMAND
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
