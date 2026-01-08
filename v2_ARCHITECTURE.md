@@ -1,6 +1,6 @@
 # LastLook v2.0: Architecture & Technical Specs
 
-**Status:** Release Candidate 1 (Visualizer & Hybrid Inspector - Phase 8 Complete)
+**Status:** Release Candidate 2 (Advanced Metadata - Phase 8 Fully Complete)
 **Stack:** Tauri (Rust) + React (TypeScript) + Tailwind CSS + Zustand
 **Date:** January 6, 2026
 
@@ -31,15 +31,15 @@ LastLook v2 uses a **Hybrid Architecture** enhanced with a **Sidecar Pattern**:
 
 _Files that control the build environment._
 
-| File                            | Purpose                                                                            | Dependencies           |
-| :------------------------------ | :--------------------------------------------------------------------------------- | :--------------------- |
-| **`package.json`**              | Defines project scripts (`dev`, `build`) and installed libraries.                  | Node.js                |
-| **`vite.config.ts`**            | Configures the Vite build server. Handles Hot Module Replacement (HMR).            | `vite`, `tauri`        |
-| **`tsconfig.json`**             | Rules for the TypeScript compiler (strict mode, target version).                   | TypeScript             |
-| **`tailwind.config.js`**        | Configures Tailwind's theme and content scanner.                                   | Tailwind CSS           |
-| **`postcss.config.js`**         | Configures the CSS post-processor (required for Tailwind v4).                      | `@tailwindcss/postcss` |
-| **`index.html`**                | The HTML entry point that loads the React JavaScript bundle.                       | -                      |
-| **`src-tauri/tauri.conf.json`** | **CRITICAL:** Configures `assetProtocol` (Scope: `**`) and `externalBin` (FFmpeg). | Tauri Core             |
+| File                            | Purpose                                                                                      | Dependencies           |
+| :------------------------------ | :------------------------------------------------------------------------------------------- | :--------------------- |
+| **`package.json`**              | Defines project scripts (`dev`, `build`) and installed libraries.                            | Node.js                |
+| **`vite.config.ts`**            | Configures the Vite build server. Handles Hot Module Replacement (HMR).                      | `vite`, `tauri`        |
+| **`tsconfig.json`**             | Rules for the TypeScript compiler (strict mode, target version).                             | TypeScript             |
+| **`tailwind.config.js`**        | Configures Tailwind's theme and content scanner.                                             | Tailwind CSS           |
+| **`postcss.config.js`**         | Configures the CSS post-processor (required for Tailwind v4).                                | `@tailwindcss/postcss` |
+| **`index.html`**                | The HTML entry point that loads the React JavaScript bundle.                                 | -                      |
+| **`src-tauri/tauri.conf.json`** | **CRITICAL:** Configures `assetProtocol` (Scope: `**`) and `externalBin` (FFmpeg & FFprobe). | Tauri Core             |
 
 ### 2.2 Source Code (`src/`)
 
@@ -74,11 +74,12 @@ _Pure UI elements (Presentation Layer)._
   - **Updated Logic:** Now accepts `MouseEvent` to handle `stopPropagation` (preventing immediate deselection when clicking a row).
   - **Dependencies:** `DirEntry` (type)
 - **`Inspector.tsx`**
-  - **Purpose:** The "Hybrid" details panel. Displays metadata (Size, Date) and Media Previews.
+  - **Purpose:** The "Hybrid" details panel. Displays metadata (Size, Date), Media Previews, and Advanced Video Info (Resolution, FPS, Codec).
   - **Updated Logic:**
-    - **Hybrid Mode:** Stacks a "Batch Header" (showing total selection size) and a "File Preview" if both are active simultaneously.
+    - **Hybrid Mode:** Stacks "Batch Header" and "File Preview" if both are active.
     - **Asset Protocol:** Loads images via `asset://localhost/...` urls.
-    - **Origin Tracking:** Uses `selectedFileOrigin` to correctly resolve paths from Source vs Dest.
+    - **Origin Tracking:** Uses `selectedFileOrigin` to correctly resolve paths.
+    - **Advanced Meta:** Fetches detailed video stats via Rust command.
   - **Dependencies:** `appStore`, `@tauri-apps/plugin-fs`, `useMedia`
 - **`ConflictModal.tsx`**
   - **Purpose:** A modal dialog that appears when source files already exist in the destination. Offers options to "Overwrite All", "Skip Existing", or "Cancel".
@@ -130,8 +131,9 @@ _The Rust Core._
 - **`tauri.conf.json`**
   - **Purpose:** Configures window size, permissions, and bundle identifiers (`com.lastlook.app`). Defines `externalBin` for FFmpeg sidecar.
 - **`src-tauri/binaries/`**
-  - **Purpose:** Stores the platform-specific FFmpeg executable.
-  - **Files:** `ffmpeg-x86_64-pc-windows-msvc.exe`.
+  - **Purpose:** Stores platform-specific executables.
+  - **Files:** - `ffmpeg-x86_64-pc-windows-msvc.exe`
+    - `ffprobe-x86_64-pc-windows-msvc.exe`
 - **`capabilities/default.json`**
   - **Purpose:** Security rules defining what the frontend is allowed to do.
   - **Permissions:**
@@ -145,9 +147,10 @@ _The Rust Core._
 - **`src/lib.rs`**
   - **Purpose:** The Engine. Contains:
     - `calculate_hash`: High-performance xxHash (xxh3) check using 64MB buffers.
-    - `copy_file`: Pipelined Transfer + Verification loop. Emits `transfer-verifying` event between phases. Resets abort flag on start.
+    - `copy_file`: Pipelined Transfer + Verification loop.
     - `cancel_transfer`: Sets atomic flag to interrupt active transfers.
-    - `generate_thumbnail`: (New) Spawns FFmpeg sidecar to extract a frame at 00:01 and save it to `%TEMP%/lastlook_cache`.
+    - `generate_thumbnail`: Spawns FFmpeg sidecar to extract a frame at 00:01.
+    - `get_video_metadata`: (New) Spawns FFprobe sidecar to parse Resolution, FPS, and Codec.
 
 ---
 
@@ -348,10 +351,10 @@ _Goal: Address User Feedback, Fix Layout Glitches, and Improve Data Visualizatio
 
 _Goal: Media features powered by FFmpeg._
 
-- [x] **Sidecar Binary Integration:** Bundle `ffmpeg.exe` with the Tauri installer.
+- [x] **Sidecar Binary Integration:** Bundle `ffmpeg.exe` and `ffprobe.exe` with the Tauri installer.
 - [x] **Thumbnail Generator:** Create a background command to extract a frame at 00:01 and cache it for the Inspector.
 - [x] **Hybrid Inspector:** Updated Inspector UI to stack "Batch Header" and "File Preview" when both are active.
 - [x] **Security Upgrade:** Enabled `assetProtocol` to serve local images and `fs:allow-read` for temp cache access.
 - [x] **UX Polish:** Implemented "Click-to-Deselect" logic on file list backgrounds.
-- [ ] **Advanced Metadata:** Use `ffprobe` to extract Resolution, Codec, Bitrate, and Frame Rate info.
+- [x] **Advanced Metadata:** Use `ffprobe` to extract Resolution, Codec, Bitrate, and Frame Rate info.
 - [ ] **Comparators:** A "Compare Mode" that places the Source and Destination files side-by-side visually to verify quality manually.

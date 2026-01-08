@@ -32,6 +32,7 @@ export function useTransfer() {
     setBatchInfo,
     addCompletedBytes,
     setTransferStartTime,
+    resetJobMetrics, // <--- 1. IMPORTED RESET ACTION
   } = useAppStore();
 
   const [isTransferring, setIsTransferring] = useState(false);
@@ -187,6 +188,11 @@ export function useTransfer() {
           // RUN TRANSFER
           await invoke("copy_file", { source: fullSource, dest: fullDest });
 
+          // --- FIX: SNAP UI TO DONE IMMEDIATELY ---
+          // This forces the bar to 100% green the moment Rust returns success
+          setProgress(100);
+          // ----------------------------------------
+
           // SUCCESS
           removeVerifyingFile(file.name);
           const currentDestFiles = new Set(useAppStore.getState().destFiles);
@@ -218,16 +224,19 @@ export function useTransfer() {
 
       if (!abortRef.current) {
         setProgress(100);
+        // FIX: Reduced delay from 2000ms to 1000ms for snappier feel
         setTimeout(() => {
           setCurrentFile("");
           setProgress(0);
           setCurrentFileBytes(0);
-        }, 2000);
+          resetJobMetrics();
+        }, 1000);
       } else {
         // If cancelled, reset immediately
         setCurrentFile("Stopped");
         setProgress(0);
         setCurrentFileBytes(0);
+        resetJobMetrics();
       }
     }
   }

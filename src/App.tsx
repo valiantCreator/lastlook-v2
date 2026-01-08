@@ -22,7 +22,8 @@ function App() {
     verifyingFiles,
     conflicts,
     setConflicts,
-    swapPaths, // <--- NEW IMPORT
+    swapPaths,
+    transferStartTime, // <--- 1. ADD THIS IMPORT
   } = useAppStore();
 
   const {
@@ -146,7 +147,6 @@ function App() {
         </div>
 
         {/* Content */}
-        {/* FIX: Removed 'mb-20'. Flexbox now manages the height automatically. */}
         <div className="flex-1 p-4 flex flex-col min-h-0">
           {!destPath ? (
             <div className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-zinc-800 rounded-xl hover:border-zinc-700 transition-colors bg-zinc-900/20">
@@ -180,6 +180,7 @@ function App() {
 
         {/* --- JOB DRAWER (Stacked in Flex Column) --- */}
         <JobDrawer
+          key={transferStartTime || "idle"} // <--- 2. THE FIX: Force remount on reset
           isTransferring={isTransferring}
           currentFile={currentFile}
           currentFileBytes={currentFileBytes}
@@ -192,7 +193,6 @@ function App() {
       </div>
 
       {/* --- RIGHT PANEL: INSPECTOR --- */}
-      {/* UPDATE: Increased width from w-[300px] to w-[400px] for better metadata display */}
       <div className="w-[400px] border-l border-zinc-800 flex flex-col bg-zinc-900/30 shrink-0">
         <div className="h-12 border-b border-zinc-800 flex items-center px-4 bg-zinc-900/50 shrink-0">
           <span className="font-bold text-sm tracking-wide text-zinc-100">

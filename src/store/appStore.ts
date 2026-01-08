@@ -33,7 +33,11 @@ interface AppState {
   addVerifiedFile: (filename: string) => void;
 
   // UPDATED: Now accepts an optional origin ('source' is default for backward compatibility)
-  setSelectedFile: (file: DirEntry | null, origin?: "source" | "dest") => void;
+  // FIX: Added | null to the origin type to prevent TS mismatch
+  setSelectedFile: (
+    file: DirEntry | null,
+    origin?: "source" | "dest" | null
+  ) => void;
   setConflicts: (files: string[]) => void;
 
   // CHECKBOX ACTIONS
@@ -51,6 +55,9 @@ interface AppState {
   setBatchInfo: (totalBytes: number) => void;
   addCompletedBytes: (bytes: number) => void;
   setTransferStartTime: (time: number | null) => void;
+
+  // NEW: Reset Action for Zombie Drawer fix
+  resetJobMetrics: () => void;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -169,5 +176,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       completedBytes: 0,
       transferStartTime: null,
       isDrawerOpen: false,
+    }),
+
+  // NEW: Reset Action implementation
+  resetJobMetrics: () =>
+    set({
+      batchTotalBytes: 0,
+      completedBytes: 0,
+      transferStartTime: null,
     }),
 }));

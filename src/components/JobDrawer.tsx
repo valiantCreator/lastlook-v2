@@ -44,7 +44,9 @@ export function JobDrawer({
     const interval = setInterval(() => {
       const now = Date.now();
       const elapsed = now - transferStartTime;
-      if (elapsed < 1000) return;
+
+      // FIX: Lowered threshold from 1000 to 250ms for faster updates
+      if (elapsed < 250) return;
 
       // LIVE MATH: Total Done = Finished Files + Current Active File Progress
       const totalProcessed = completedBytes + currentFileBytes;
@@ -61,7 +63,7 @@ export function JobDrawer({
           remaining > 0 ? formatDuration(remaining) : "Almost done..."
         );
       }
-    }, 1000);
+    }, 250); // FIX: Also updated interval to tick faster (250ms)
 
     return () => clearInterval(interval);
   }, [
