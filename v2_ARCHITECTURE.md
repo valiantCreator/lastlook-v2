@@ -60,6 +60,7 @@ _The React Frontend logic, split into semantic layers._
 - **`App.tsx`**
   - **Purpose:** The "Layout Frame". It creates the 3-column Flexbox grid (Source / Dest / Inspector) and handles global layout constraints (`h-screen`, `overflow-hidden`).
   - **Logic:**
+    - **Startup Cleanup:** Triggers `clearTempCache` on mount to wipe previous session data.
     - **Drawer Reset:** Passes `key={transferStartTime}` to the `JobDrawer` component. This forces React to destroy and recreate the drawer component whenever a new transfer starts, preventing "stuck" internal state (The "Zombie Drawer" Fix).
     - **Modal Layer:** Conditionally renders the `ConflictModal` overlay based on store state.
   - **Dependencies:** `FileList`, `DestFileList`, `Inspector`, `JobDrawer`, `useFileSystem`, `appStore`
@@ -123,6 +124,7 @@ _Reusable Logic Layer encapsulating side effects._
     - `selectSource()`: Opens native folder picker.
     - `scanSource()`: Reads `DirEntry[]` and sorts folders-first.
     - `unmountDest()`: Clears the destination path from the Store.
+    - **`clearTempCache()`**: Triggers the Rust backend to wipe the `lastlook_cache` folder (Auto-Clean).
   - **Dependencies:** `@tauri-apps/plugin-dialog`, `@tauri-apps/plugin-fs`
 - **`useTransfer.ts`**
   - **Purpose:** The core transfer engine controller.
@@ -410,3 +412,4 @@ _Goal: Ensure the app feels snappy and bug-free._
 - [x] **Small File Support:** Lowered JobDrawer calculation threshold (250ms) for instant feedback.
 - [x] **Snappy Transitions:** Reduced post-transfer success delay to 1s.
 - [x] **Type Safety:** Resolved TypeScript definitions for file selection origins.
+- [x] **Auto-Cleanup:** Implemented "Nuke on Launch" strategy to clear `%TEMP%/lastlook_cache` on startup.

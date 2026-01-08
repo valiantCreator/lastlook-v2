@@ -32,6 +32,7 @@ function App() {
     scanDest,
     clearSource,
     unmountDest,
+    clearTempCache, // <--- 2. GET CACHE CLEANER
   } = useFileSystem();
 
   // Destructure cancelTransfer & Resolution Handlers
@@ -45,6 +46,12 @@ function App() {
     currentFileBytes,
     progress,
   } = useTransfer();
+
+  // 3. AUTO-CLEAN CACHE ON STARTUP (NEW)
+  useEffect(() => {
+    // This runs once when the app opens, wiping any leftovers from previous sessions
+    clearTempCache();
+  }, []);
 
   // 2. AUTO-SCAN TRIGGERS
   useEffect(() => {

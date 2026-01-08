@@ -1,6 +1,7 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { readDir } from "@tauri-apps/plugin-fs";
 import { useAppStore } from "../store/appStore";
+import { invoke } from "@tauri-apps/api/core"; // <--- ADDED IMPORT
 
 export function useFileSystem() {
   const { setSourcePath, setFileList, setDestPath, resetSource, setDestFiles } =
@@ -96,12 +97,23 @@ export function useFileSystem() {
     setDestFiles(new Set());
   }
 
+  // 6. CACHE CLEANER (NEW)
+  async function clearTempCache() {
+    try {
+      await invoke("clean_video_cache");
+      console.log("✨ Cache Cleared Successfully");
+    } catch (err) {
+      console.error("Failed to clear cache:", err);
+    }
+  }
+
   return {
     selectSource,
     selectDest,
     scanSource,
-    scanDest, // <--- Exported for use in App.tsx effects
+    scanDest,
     clearSource,
     unmountDest,
+    clearTempCache, // <--- EXPORTED
   };
 }

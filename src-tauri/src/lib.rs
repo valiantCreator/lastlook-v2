@@ -41,6 +41,25 @@ struct FfprobeStream {
 
 // --- COMMANDS ---
 
+// --- NEW COMMAND: CLEANUP ---
+#[tauri::command]
+fn clean_video_cache() -> Result<(), String> {
+    // 1. Target the specific temp folder
+    let temp_dir = std::env::temp_dir().join("lastlook_cache");
+
+    // 2. Check if it exists
+    if temp_dir.exists() {
+        println!("🧹 Cleaning Cache at: {:?}", temp_dir);
+        
+        // 3. Nuke it (safely)
+        fs::remove_dir_all(&temp_dir).map_err(|e| e.to_string())?;
+        
+        // 4. Recreate it immediately so it's ready for new files
+        fs::create_dir_all(&temp_dir).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 #[tauri::command]
 fn cancel_transfer(state: tauri::State<TransferState>) {
     state.abort_flag.store(true, Ordering::Relaxed);
@@ -283,7 +302,8 @@ pub fn run() {
             calculate_hash, 
             cancel_transfer,
             generate_thumbnail,
-            get_video_metadata // <--- REGISTERED NEW COMMAND
+            get_video_metadata,
+            clean_video_cache // <--- REGISTERED NEW COMMAND
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
