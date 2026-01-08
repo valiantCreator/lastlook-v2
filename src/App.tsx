@@ -1,6 +1,5 @@
 import "./App.css";
 import { useEffect } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { useFileSystem } from "./hooks/useFileSystem";
 import { useAppStore } from "./store/appStore";
 import { FileList } from "./components/FileList";
