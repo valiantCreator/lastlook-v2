@@ -21,13 +21,12 @@ _Goal: Ensure the application is safe to use in production environments (no corr
   > "Also, if a copy is stopped - DELETE THE FILE THAT WAS PARTIALLY COPIED. I hate when programs leave a half copied file, that is not just useless it is detrimental"
 - **The Detailed Fix:** We must modify the Rust backend to handle the "Cancellation" state destructively for the specific file currently being written. When the `abort_flag` is detected inside the copy loop, the system must not only stop writing but also actively remove the file from the filesystem before returning the error state to the frontend.
 - **Technical Implementation:**
+  - **Associated File:** `src-tauri/src/lib.rs`
   - **Logic:** Inside the `copy_file` loop in Rust, immediately after detecting `state.abort_flag` is true:
     1.  Identify the path of the file currently being written.
     2.  Close the write stream to release the file lock.
     3.  Execute `fs::remove_file(dest_path)` to delete the partial data.
     4.  Return the "CANCELLED" error string to the frontend so the UI updates correctly.
-- **Associated Files:**
-  - `src-tauri/src/lib.rs` (Primary logic change)
 
 #### 2. Smart Resume (Difference Transfer)
 
@@ -38,14 +37,12 @@ _Goal: Ensure the application is safe to use in production environments (no corr
   > "i want to have it check the files for the filename AS WELL as it's file size and modification date to see if files that are named the same are actually the same file"
 - **The Detailed Fix:** We will implement a "Smart Skip" or "Idempotent Check" at the moment a transfer begins for each file. Instead of relying solely on the user's choice at the start of the batch, the transfer logic will perform a real-time check.
 - **Technical Implementation:**
+  - **Associated Files:** `src/hooks/useTransfer.ts`, `src/components/JobDrawer.tsx`
   - **Logic:** Inside `useTransfer.ts`, before invoking the Rust `copy_file` command for a specific item:
     1.  Check if a file with the same name exists in the destination.
     2.  If it exists, compare the **File Size** (bytes) and **Modification Date** of the Source vs. Destination.
-    3.  If they match (within a small tolerance for time), mark the file status as `SKIPPED` in the UI immediately and proceed to the next file.
-    4.  Do NOT invoke the Rust backend for these files.
-- **Associated Files:**
-  - `src/hooks/useTransfer.ts` (Logic implementation)
-  - `src/components/JobDrawer.tsx` (UI to reflect "Skipped" status clearly)
+    3.  If they match (within a small tolerance for time difference), mark the file status as `SKIPPED` in the UI immediately.
+    4.  Do NOT invoke the Rust backend for these files; proceed immediately to the next one.
 
 #### 3. Intelligent Drag & Drop
 
@@ -54,16 +51,14 @@ _Goal: Ensure the application is safe to use in production environments (no corr
   > "drag and drop! the mouse shows the + icon when you drag something to the source pane like it allows drag and drop but it isn’t registering the drop when you release the click"
 - **The Detailed Fix:** We need to update the drop handler to inspect the payload. If the dropped item is a file (not a folder), we must resolve its **Parent Directory** and set that parent directory as the `sourcePath`.
 - **Technical Implementation:**
+  - **Associated Files:** `src/App.tsx`, `src/hooks/useFileSystem.ts`
   - **Logic:**
     1.  Listen for the `drop` event.
     2.  Check the `payload.paths`.
     3.  Use the filesystem API to check `stat.isDirectory()`.
-    4.  If it is a file, use `path.dirname()` (or string manipulation) to get the parent folder.
+    4.  **If it is a File:** Use `path.dirname()` (or string manipulation) to get the parent folder.
     5.  Call `setSourcePath(parentFolder)`.
-    6.  _Bonus:_ Auto-scroll the file list to highlight the specific file that was dropped.
-- **Associated Files:**
-  - `src/App.tsx` (Event listener)
-  - `src/hooks/useFileSystem.ts` (Path handling logic)
+    6.  **Bonus:** Auto-scroll the file list to highlight the specific file that was dropped.
 
 ---
 
@@ -78,14 +73,12 @@ _Goal: Add the features that make professional DITs (Digital Imaging Technicians
   > "I don’t see why the app can’t also read this txt file and just display it in the UI. It’s probably safer to have a logs folder in a separate folder though... definitely make the log file thing an option in settings... just make sure the naming of these transfer logs is time dependent or has a unique naming convention"
 - **The Detailed Fix:** Upon the successful (or partial) completion of a batch job, the app will generate a text file containing a manifest of operations.
 - **Technical Implementation:**
+  - **Associated Files:** `src/hooks/useTransfer.ts`, `src/utils/logGenerator.ts` (New)
   - **Logic:**
     1.  Create a `sessionLog` object in `useTransfer.ts` that accumulates data for every file handled (Source Name, Dest Name, File Size, Hash Status, Timestamp).
     2.  When the batch finishes, format this object into a readable `.txt` string (Header: Date/Time; Body: File List; Footer: Summary).
     3.  Write this file to: `[DestinationPath]/LastLook_TransferLog_[YYYY-MM-DD_HHmm].txt`.
-    4.  Also save a JSON version to the app's internal `%APPDATA%` directory to populate a future "History" UI.
-- **Associated Files:**
-  - `src/hooks/useTransfer.ts` (Data collection)
-  - `src/utils/logGenerator.ts` (New file: Formatting logic)
+    4.  **Secondary:** Save a JSON copy to `%APPDATA%` for internal app history.
 
 #### 5. Right-Click Context Menus
 
@@ -94,13 +87,11 @@ _Goal: Add the features that make professional DITs (Digital Imaging Technicians
   > "I’d also want to be able to right click and open the destination folder in Explorer."
 - **The Detailed Fix:** We will add a custom context menu handler to the file rows in both the Source and Destination lists.
 - **Technical Implementation:**
+  - **Associated Files:** `src/components/FileRow.tsx`, `src/components/DestFileList.tsx`
   - **Logic:**
     1.  Attach `onContextMenu` event listener to `FileRow` components.
     2.  Prevent the default browser context menu.
     3.  Invoke the Tauri Shell plugin's `open` command on the parent directory of the file (or use a "highlight" command if available in the plugin) to open the native OS file explorer.
-- **Associated Files:**
-  - `src/components/FileRow.tsx`
-  - `src/components/DestFileList.tsx`
 
 #### 6. "Verified" Tooltip (Education)
 
@@ -109,12 +100,10 @@ _Goal: Add the features that make professional DITs (Digital Imaging Technicians
   > "okay the copy worked. Verified MD5 match? what’s that mean? I’d do a tooltip popup on hovering over that. it could say: “MD5 Match is a blah blah blah”"
 - **The Detailed Fix:** We will add a UI element that explains the verification method to educate the user and provide reassurance.
 - **Technical Implementation:**
+  - **Associated Files:** `src/components/JobDrawer.tsx`
   - **Logic:**
     1.  In the `JobDrawer` or success badge, change the text or add an info icon.
     2.  Implement a hover tooltip that reads: _"Verified via xxHash-64. A bit-for-bit digital fingerprint match was confirmed. This ensures 100% data integrity, similar to MD5 but optimized for speed."_
-- **Associated Files:**
-  - `src/components/JobDrawer.tsx`
-  - `src/components/ui/Tooltip.tsx` (If generic component needed)
 
 ---
 
@@ -129,6 +118,7 @@ _Goal: Improve the "feel" and flexibility of the application, accommodating powe
   > "okay some sort of shift+select feature def needs to be in this... Shift is the goat for that... so maybe shift select on the left of the file selects it, shift select on the right side just highlights those files and if multiple are selected and you click one of the checkboxes, it selects all of them."
 - **The Detailed Fix:** We will implement state tracking for the `lastClickedIndex` to enable range selection.
 - **Technical Implementation:**
+  - **Associated Files:** `src/components/FileList.tsx`, `src/store/appStore.ts`
   - **Logic:**
     1.  In `store/appStore.ts`, verify we can access the file list index.
     2.  In `FileList.tsx`, track `lastClickedIndex` in local state.
@@ -136,9 +126,6 @@ _Goal: Improve the "feel" and flexibility of the application, accommodating powe
         - If `Shift` key is held: Calculate the range between `lastClickedIndex` and `currentClickedIndex`.
         - Toggle all files in that range to the new state.
         - Update `checkedFiles` Set in the store.
-- **Associated Files:**
-  - `src/components/FileList.tsx`
-  - `src/store/appStore.ts`
 
 #### 8. "Ask Me For Each" Conflict Mode
 
@@ -147,13 +134,11 @@ _Goal: Improve the "feel" and flexibility of the application, accommodating powe
   > "niche use case but maybe add a third option that says “ask me for each file”. when this third option is selected I’d maybe add small red text that pops up like “don’t select this option if you plan to leave the computer while it transfers”"
 - **The Detailed Fix:** We will add a third button to the Conflict Modal.
 - **Technical Implementation:**
+  - **Associated Files:** `src/components/ConflictModal.tsx`, `src/hooks/useTransfer.ts`
   - **Logic:**
     1.  Update `ConflictModal.tsx` to include an "Ask For Each" button.
     2.  Add the requested warning text in red: _"⚠️ Warning: You will be prompted for every conflict. Do not leave your computer."_
     3.  In `useTransfer.ts`, if this mode is selected, the resolution logic must iterate through the `conflicts` array one by one, presenting a modal for each item instead of batch-processing them.
-- **Associated Files:**
-  - `src/components/ConflictModal.tsx`
-  - `src/hooks/useTransfer.ts`
 
 #### 9. Recursive Folder Stats
 
@@ -162,13 +147,12 @@ _Goal: Improve the "feel" and flexibility of the application, accommodating powe
   > "showing the amount of sub files and sub folders would be great. Because then when you eventually add a checksum feature... you can verify files folders and bytes"
 - **The Detailed Fix:** We need a way to scan directory trees recursively. Since this can be slow on network drives, it must be an asynchronous Rust command.
 - **Technical Implementation:**
+  - **Associated Files:** `src-tauri/src/lib.rs` (New Command), `src/components/Inspector.tsx`
   - **Logic:**
     1.  Create a new Rust command `get_dir_stats(path: String)` in `lib.rs`.
     2.  Use the `walkdir` crate (or recursive `fs::read_dir`) to count files and folders and sum total bytes.
-    3.  Expose this data to the `Inspector` component whenever a folder is selected.
-- **Associated Files:**
-  - `src-tauri/src/lib.rs` (New Command)
-  - `src/components/Inspector.tsx`
+    3.  Return struct `{ file_count, folder_count, total_bytes }`.
+    4.  Expose this data to the `Inspector` component whenever a folder is selected.
 
 ---
 
@@ -192,9 +176,9 @@ _Goal: Create a centralized hub for customization without cluttering the main UI
   - Setting: "Play sound on job completion?" (Checkbox).
   - Setting: "Play sound on error?" (Checkbox).
 
-#### 2. Transfer Tab
+#### 2. Transfer Behaviors
 
-- **Conflict Policy Defaults:**
+- **Default Conflict Policy:**
   - Setting: "Default Action for Duplicates".
   - Options: "Always Ask" (Default), "Always Skip", "Ask For Each".
 - **Verification Engine:**
