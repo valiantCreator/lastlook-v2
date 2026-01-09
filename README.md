@@ -16,6 +16,15 @@ If you just want to use the app, you don't need to touch any code.
     - `LastLook_0.1.0_x64_en-US.msi`
 4.  Run the installer. Windows might ask for permission since this is an unsigned beta app—click "Run Anyway".
 
+### ⚠️ "Windows protected your PC" Warning?
+
+Because this is an indie app and I haven't paid for a verified Microsoft certificate yet, Windows Defender might show you a warning. This is normal.
+
+To install:
+
+1. Click **"More info"** on the blue popup.
+2. Click **"Run anyway"**.
+
 ---
 
 ## ✨ Key Features
