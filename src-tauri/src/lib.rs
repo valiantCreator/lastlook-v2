@@ -129,12 +129,21 @@ async fn copy_file(
     let mut dest_hasher = xxh3::Xxh3Builder::new().build();
 
     loop {
-        // Check Abort
+        // --- START CRITICAL FIX: NUKE PARTIAL FILE ---
         if state.abort_flag.load(Ordering::Relaxed) {
-             // Cleanup partial file
-             let _ = fs::remove_file(dest_path);
+             // 1. Close the file handle explicitly to release the OS lock (Required for Windows)
+             drop(dst_file);
+             
+             // 2. Now safe to delete the partial data
+             if let Err(e) = fs::remove_file(dest_path) {
+                 println!("⚠️ Failed to clean up partial file: {}", e);
+             } else {
+                 println!("🗑️ Cleaned up partial file: {:?}", dest_path);
+             }
+             
              return Err("CANCELLED".to_string());
         }
+        // --- END CRITICAL FIX ---
 
         let bytes_read = src_file.read(&mut buffer).map_err(|e| e.to_string())?;
         
