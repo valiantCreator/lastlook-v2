@@ -9,9 +9,27 @@
     "fs:allow-stat",
     "dialog:default",
     "shell:allow-execute",
+    "os:default",
+    "os:allow-hostname",
+    "os:allow-os-type",
+    "os:allow-version",
+    "fs:allow-write-text-file",
+    "fs:allow-read-dir",
     {
       "identifier": "fs:allow-read",
-      "allow": [{ "path": "**" }]
+      "allow": ["**"]
+    },
+    {
+      "identifier": "fs:allow-read-dir",
+      "allow": ["**"]
+    },
+    {
+      "identifier": "fs:allow-write",
+      "allow": ["**"]
+    },
+    {
+      "identifier": "fs:allow-write-text-file",
+      "allow": ["**"]
     }
   ]
 }

@@ -96,7 +96,7 @@ async fn copy_file(
     state: tauri::State<'_, TransferState>, 
     source: String, 
     dest: String
-) -> Result<(), String> {
+) -> Result<String, String> { // <--- CHANGE 1: Return String
     
     // RESET ABORT FLAG AT START
     state.abort_flag.store(false, Ordering::Relaxed);
@@ -188,14 +188,14 @@ async fn copy_file(
 
     let dest_hash = format!("{:x}", dest_hasher.finish());
 
-    // Calculate Source Hash (Requires re-reading source)
+    // Calculate Source Hash
     let source_hash = calculate_hash(source.clone()).await?;
 
     if source_hash != dest_hash {
         return Err(format!("Mismatch! Src: {} vs Dest: {}", source_hash, dest_hash));
     }
 
-    Ok(())
+    Ok(dest_hash) // <--- CHANGE 2: Return the Hash
 }
 
 // --- THUMBNAIL GENERATOR ---
@@ -317,6 +317,7 @@ async fn get_video_metadata(app: AppHandle, path: String) -> Result<VideoMetadat
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_os::init())     // <--- REGISTERED OS PLUGIN
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())

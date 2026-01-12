@@ -3,6 +3,9 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { stat } from "@tauri-apps/plugin-fs";
 import { useAppStore } from "../store/appStore";
+import { type, hostname } from "@tauri-apps/plugin-os";
+import { getVersion } from "@tauri-apps/api/app";
+import { updateManifest } from "../utils/manifest";
 
 interface ProgressEvent {
   filename: string;
@@ -32,7 +35,7 @@ export function useTransfer() {
     setBatchInfo,
     addCompletedBytes,
     setTransferStartTime,
-    resetJobMetrics, // <--- 1. IMPORTED RESET ACTION
+    resetJobMetrics,
   } = useAppStore();
 
   const [isTransferring, setIsTransferring] = useState(false);
@@ -100,6 +103,25 @@ export function useTransfer() {
 
     // --- NEW: INITIALIZE BATCH STATS ---
     setTransferStartTime(Date.now());
+
+    // --- NEW: PREPARE MANIFEST METADATA (Session Context) ---
+    const sessionId = crypto.randomUUID();
+    let machineName = "Unknown-Machine";
+    let osType = "unknown";
+    let appVer = "0.0.0";
+
+    try {
+      // FIX: Handle potential NULLs from Tauri plugins
+      const host = await hostname();
+      const os = await type();
+      const ver = await getVersion();
+
+      machineName = host || "Unknown-Machine";
+      osType = os || "unknown";
+      appVer = ver || "0.0.0";
+    } catch (e) {
+      console.warn("Could not fetch machine metadata", e);
+    }
 
     // Calculate Total Batch Size (Async)
     const filesToTransfer = fileList.filter((f) => checkedFiles.has(f.name));
@@ -254,7 +276,37 @@ export function useTransfer() {
 
         try {
           // RUN TRANSFER
-          await invoke("copy_file", { source: fullSource, dest: fullDest });
+          // --- CHANGE: Capture the Hash String from Rust ---
+          const hash = await invoke<string>("copy_file", {
+            source: fullSource,
+            dest: fullDest,
+          });
+
+          // --- CHANGE: MANIFEST UPDATE ---
+          // Update the Digital Receipt immediately
+          await updateManifest(
+            destPath!,
+            {
+              filename: file.name,
+              rel_path: file.name,
+              source_path: fullSource.replace(/\\/g, "/"), // <--- FIXED: Normalize to Forward Slashes
+              size_bytes: fileSize,
+              modified_timestamp: sourceStats?.mtime
+                ? new Date(sourceStats.mtime).getTime()
+                : Date.now(),
+              hash_type: "xxh3_64",
+              hash_value: hash, // The hash from Rust
+              status: "verified",
+              verified_at: new Date().toISOString(),
+            },
+            {
+              machineName,
+              os: osType,
+              appVersion: appVer,
+              sessionId,
+            }
+          );
+          // -------------------------------
 
           // --- FIX: SNAP UI TO DONE IMMEDIATELY ---
           // This forces the bar to 100% green the moment Rust returns success
@@ -316,7 +368,7 @@ export function useTransfer() {
     resolveSkip,
     isTransferring,
     currentFile,
-    currentFileBytes, // <--- EXPOSE THIS
+    currentFileBytes,
     progress,
   };
 }
