@@ -60,9 +60,9 @@ _The React Frontend logic, split into semantic layers._
 - **`App.tsx`**
   - **Purpose:** The "Layout Frame". It creates the 3-column Flexbox grid (Source / Dest / Inspector) and handles global layout constraints (`h-screen`, `overflow-hidden`).
   - **Logic:**
+    - **Drag & Drop Engine:** Uses `tauri://drag-drop` listener with `devicePixelRatio` normalization. Implements "Zone Math" (Source < 50% Width < Dest) to handle High-DPI scaling reliably. Supports "Intelligent Drop" where dropping a file auto-mounts the parent folder and selects the specific file.
     - **Startup Cleanup:** Triggers `clearTempCache` on mount to wipe previous session data.
-    - **Drawer Reset:** Passes `key={transferStartTime}` to the `JobDrawer` component. This forces React to destroy and recreate the drawer component whenever a new transfer starts, preventing "stuck" internal state (The "Zombie Drawer" Fix).
-    - **Modal Layer:** Conditionally renders the `ConflictModal` overlay based on store state.
+    - **Drawer Reset:** Passes `key={transferStartTime}` to the `JobDrawer` component to force re-render on new jobs (Zombie Drawer Fix).
   - **Dependencies:** `FileList`, `DestFileList`, `Inspector`, `JobDrawer`, `useFileSystem`, `appStore`
 - **`App.css`**
   - **Purpose:** Global styles and animation definitions.
@@ -158,6 +158,7 @@ _Global State Management (Zustand)._
     - **`swapPaths()`**: Atomically swaps source/dest strings and wipes all file lists/sets to ensure data consistency.
     - **`resetJobMetrics()`**: Resets `transferStartTime` to `null` and bytes to `0`. This is the signal for the UI to "clean up" after a job.
     - **`checkAllMissing()`**: Diff logic that auto-selects all files in Source that are NOT in the `destFiles` set.
+    - **`setCheckedFiles()`**: Programmatically sets the selection set (used for auto-selecting dropped files).
 
 #### Utils (`src/utils/`)
 
@@ -184,7 +185,7 @@ _The Rust Core environment._
 - **`capabilities/default.json`**
   - **Purpose:** Granular Permission Control Layer (Tauri v2).
   - **Scopes:**
-    - `fs:allow-read`: Scoped to user-selected folders AND `$TEMP/**` (to read generated thumbnails).
+    - `fs:allow-read`: Scoped to `["**"]` (Global Read) to allow Drag & Drop from any external drive or location without prior dialog selection.
     - `shell:allow-execute`: Strictly limits execution to the specific sidecar binaries defined in config.
 - **`src/main.rs`**
   - **Purpose:** Entry point. Initializes the Tauri builder, registers plugins (`fs`, `dialog`, `shell`), and runs the app.
@@ -193,8 +194,10 @@ _The Rust Core environment._
   - **Commands:**
     - **`calculate_hash`**: Uses the `xxhash-rust` crate (xxh3) with a 64MB buffer for maximum throughput.
     - **`copy_file`**: Implements streamed copying with on-the-fly xxHash-64 verification. Includes **"Destructive Cancellation"** safety logic to drop file handles and delete partial data if aborted.
+    - **Timestamp Preservation:** Explicitly applies `fs::set_modified` to destination files post-transfer to ensure metadata parity for Smart Resume.
     - **`get_video_metadata`**: Spawns `ffprobe` with JSON output args to parse resolution/fps.
     - **`generate_thumbnail`**: Spawns `ffmpeg` to seek to 00:01 and output a single frame to the OS Temp directory.
+    - **`clean_video_cache`**: Recursively wipes the temp directory to prevent storage bloat.
 
 ---
 
