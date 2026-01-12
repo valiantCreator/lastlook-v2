@@ -192,7 +192,7 @@ _The Rust Core environment._
   - **Purpose:** The Application Logic Library.
   - **Commands:**
     - **`calculate_hash`**: Uses the `xxhash-rust` crate (xxh3) with a 64MB buffer for maximum throughput.
-    - **`copy_file`**: Implements `std::fs::copy`.
+    - **`copy_file`**: Implements streamed copying with on-the-fly xxHash-64 verification. Includes **"Destructive Cancellation"** safety logic to drop file handles and delete partial data if aborted.
     - **`get_video_metadata`**: Spawns `ffprobe` with JSON output args to parse resolution/fps.
     - **`generate_thumbnail`**: Spawns `ffmpeg` to seek to 00:01 and output a single frame to the OS Temp directory.
 

@@ -11,7 +11,7 @@
     "shell:allow-execute",
     {
       "identifier": "fs:allow-read",
-      "allow": [{ "path": "$TEMP/**" }]
+      "allow": [{ "path": "**" }]
     }
   ]
 }

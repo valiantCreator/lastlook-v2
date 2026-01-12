@@ -105,11 +105,20 @@ async fn copy_file(
     let dest_path = Path::new(&dest);
     let filename = source_path.file_name().unwrap().to_string_lossy().to_string();
 
-    // 1. CHECK SOURCE SIZE
-    let total_size = fs::metadata(source_path).map_err(|e| e.to_string())?.len();
+    // 1. CHECK SOURCE SIZE & METADATA
+    let src_file = fs::File::open(source_path).map_err(|e| e.to_string())?;
+    let src_metadata = src_file.metadata().map_err(|e| e.to_string())?;
+    let total_size = src_metadata.len();
+    
+    // --- NEW: CAPTURE SOURCE TIMESTAMP ---
+    let src_mod_time = src_metadata.modified().map_err(|e| e.to_string())?;
+    // -------------------------------------
 
-    // 2. OPEN FILES
-    let mut src_file = fs::File::open(source_path).map_err(|e| e.to_string())?;
+    // 2. OPEN FILES (We need a mutable reader for the loop)
+    // We already opened src_file above, but we need to read it. 
+    // Since we didn't read from it yet, we can try to use it if it's mutable, 
+    // or simply re-open/clone. For safety and clarity with the metadata borrow above:
+    let mut reader = fs::File::open(source_path).map_err(|e| e.to_string())?;
     
     // Ensure dest directory exists
     if let Some(parent) = dest_path.parent() {
@@ -145,7 +154,7 @@ async fn copy_file(
         }
         // --- END CRITICAL FIX ---
 
-        let bytes_read = src_file.read(&mut buffer).map_err(|e| e.to_string())?;
+        let bytes_read = reader.read(&mut buffer).map_err(|e| e.to_string())?;
         
         if bytes_read == 0 { break; } // EOF
 
@@ -164,6 +173,14 @@ async fn copy_file(
             "total": total_size
         })).unwrap();
     }
+
+    // --- NEW: APPLY TIMESTAMP FIX ---
+    // Force the destination file to match the source's modification time.
+    // This allows "Smart Resume" to verify files based on date later.
+    if let Err(e) = dst_file.set_modified(src_mod_time) {
+        println!("⚠️ Warning: Could not set modification time: {}", e);
+    }
+    // --------------------------------
 
     // 4. VERIFICATION PHASE
     // Notify UI we are switching phases

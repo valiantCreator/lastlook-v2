@@ -83,12 +83,12 @@ export function useTransfer() {
   // 3. RESOLUTION HANDLERS
   function resolveOverwrite() {
     setConflicts([]);
-    executeTransfer(false);
+    executeTransfer(false); // <--- Matches "Overwrite All" behavior
   }
 
   function resolveSkip() {
     setConflicts([]);
-    executeTransfer(true);
+    executeTransfer(true); // <--- Matches "Skip Existing" behavior
   }
 
   // 4. THE MAIN LOOP
@@ -156,33 +156,101 @@ export function useTransfer() {
         // Reset local bytes for next file
         setCurrentFileBytes(0);
 
-        // --- GET FILE SIZE FOR ACCOUNTING ---
-        let fileSize = 0;
+        // --- PATH HELPERS ---
         const separator = sourcePath!.endsWith("\\") ? "" : "\\";
         const destSep = destPath!.endsWith("\\") ? "" : "\\";
-
-        try {
-          const info = await stat(`${sourcePath}${separator}${file.name}`);
-          fileSize = info.size;
-        } catch {
-          /* ignore */
-        }
-
-        // --- SKIP LOGIC ---
-        if (skipExisting && destFiles.has(file.name)) {
-          console.log(`Skipping existing file: ${file.name}`);
-          addCompletedBytes(fileSize); // Mark this chunk as "Done" (Skipped)
-          continue;
-        }
-
-        // Optimization: Skip if already verified
-        if (verifiedFiles.has(file.name)) {
-          addCompletedBytes(fileSize); // Mark this chunk as "Done" (Already there)
-          continue;
-        }
-
         const fullSource = `${sourcePath}${separator}${file.name}`;
         const fullDest = `${destPath}${destSep}${file.name}`;
+
+        // --- GET FILE SIZE FOR ACCOUNTING & SMART CHECK ---
+        let fileSize = 0;
+        let sourceStats = null;
+
+        try {
+          sourceStats = await stat(fullSource);
+          fileSize = sourceStats.size;
+        } catch (err) {
+          console.warn(`Failed to stat source file ${file.name}:`, err);
+        }
+
+        // --- SKIP LOGIC (Explicit User Choice from Modal "Skip Existing") ---
+        if (skipExisting && destFiles.has(file.name)) {
+          console.log(`Explicit Skip: ${file.name}`);
+          addCompletedBytes(fileSize);
+          continue;
+        }
+
+        // --- SMART RESUME CHECK (Implicit) ---
+        // Even if user chose "Overwrite" (skipExisting=false), we check if they are identical.
+        if (destFiles.has(file.name)) {
+          // DEBUG LOG: Proving we entered the check
+          console.log(`🔎 Checking Smart Resume for: ${file.name}`);
+
+          if (sourceStats) {
+            try {
+              const destStats = await stat(fullDest);
+
+              const isSameSize = destStats.size === fileSize;
+
+              // Date Comparison (3-second tolerance for ExFAT/FAT32 rounding)
+              let isSameDate = false;
+              let srcTime = 0;
+              let dstTime = 0;
+
+              if (sourceStats.mtime && destStats.mtime) {
+                srcTime = new Date(sourceStats.mtime).getTime();
+                dstTime = new Date(destStats.mtime).getTime();
+                const diff = Math.abs(srcTime - dstTime);
+                if (diff < 3000) {
+                  isSameDate = true;
+                }
+              }
+
+              // LOG THE COMPARISON RESULT
+              console.log(
+                `   > Stats: Size[${isSameSize ? "MATCH" : "DIFF"}] Date[${
+                  isSameDate ? "MATCH" : "DIFF"
+                }]`
+              );
+              if (!isSameSize)
+                console.log(`   > Size: ${fileSize} vs ${destStats.size}`);
+              if (!isSameDate)
+                console.log(`   > Date: ${srcTime} vs ${dstTime}`);
+
+              if (isSameSize && isSameDate) {
+                console.log(
+                  `⏭️ Smart Resume: Skipping ${file.name} (Identical)`
+                );
+                addVerifiedFile(file.name); // Mark Green
+                addCompletedBytes(fileSize); // Advance Bar
+
+                // Ensure destFiles set is synced
+                const currentDestFiles = new Set(
+                  useAppStore.getState().destFiles
+                );
+                currentDestFiles.add(file.name);
+                setDestFiles(currentDestFiles);
+
+                continue; // <--- SKIP TRANSFER
+              } else {
+                console.log(`   > Files differ. Overwriting...`);
+              }
+            } catch (err) {
+              console.warn(
+                `   > Smart Check failed (could not stat dest):`,
+                err
+              );
+            }
+          } else {
+            console.warn(`   > Smart Check skipped: No Source Stats`);
+          }
+        }
+
+        // Optimization: Skip if already verified in this session
+        if (verifiedFiles.has(file.name)) {
+          addCompletedBytes(fileSize);
+          continue;
+        }
 
         try {
           // RUN TRANSFER

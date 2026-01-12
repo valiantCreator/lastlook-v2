@@ -44,6 +44,7 @@ interface AppState {
   toggleChecked: (filename: string) => void;
   checkAllMissing: () => void;
   setAllChecked: (filenames: string[]) => void;
+  setCheckedFiles: (files: Set<string>) => void; // <--- 1. ADDED INTERFACE DEFINITION
   clearChecked: () => void;
   resetSource: () => void;
 
@@ -130,6 +131,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   setAllChecked: (filenames) => set({ checkedFiles: new Set(filenames) }),
+
+  setCheckedFiles: (files) => set({ checkedFiles: files }), // <--- 2. ADDED IMPLEMENTATION
+
   clearChecked: () => set({ checkedFiles: new Set() }),
 
   // --- UTILITY ACTIONS ---

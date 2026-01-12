@@ -1,5 +1,5 @@
 import "./App.css";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useFileSystem } from "./hooks/useFileSystem";
 import { useAppStore } from "./store/appStore";
 import { FileList } from "./components/FileList";
@@ -8,6 +8,9 @@ import { Inspector } from "./components/Inspector";
 import { useTransfer } from "./hooks/useTransfer";
 import { ConflictModal } from "./components/ConflictModal";
 import { JobDrawer } from "./components/JobDrawer";
+import { listen } from "@tauri-apps/api/event"; // <--- RESTORED LISTENER
+import { stat } from "@tauri-apps/plugin-fs";
+import { dirname, basename } from "@tauri-apps/api/path"; // <--- SAFER PATH PARSING
 
 function App() {
   // 1. DATA (From Store)
@@ -22,7 +25,10 @@ function App() {
     conflicts,
     setConflicts,
     swapPaths,
-    transferStartTime, // <--- 1. ADD THIS IMPORT
+    transferStartTime,
+    setSourcePath,
+    setDestPath,
+    setCheckedFiles, // <--- NEED THIS TO AUTO-SELECT FILE
   } = useAppStore();
 
   const {
@@ -32,7 +38,7 @@ function App() {
     scanDest,
     clearSource,
     unmountDest,
-    clearTempCache, // <--- 2. GET CACHE CLEANER
+    clearTempCache,
   } = useFileSystem();
 
   // Destructure cancelTransfer & Resolution Handlers
@@ -47,10 +53,87 @@ function App() {
     progress,
   } = useTransfer();
 
-  // 3. AUTO-CLEAN CACHE ON STARTUP (NEW)
+  // --- REFS FOR DROP ZONES (Kept for layout consistency) ---
+  const sourcePanelRef = useRef<HTMLDivElement>(null);
+  const destPanelRef = useRef<HTMLDivElement>(null);
+
+  // 3. AUTO-CLEAN CACHE ON STARTUP
   useEffect(() => {
     // This runs once when the app opens, wiping any leftovers from previous sessions
     clearTempCache();
+  }, []);
+
+  // 4. INTELLIGENT DRAG & DROP LISTENER (ROBUST ZONE MATH)
+  // Reverted to Tauri Listener for reliability, but using Window Math to prevent "Ghosting"
+  useEffect(() => {
+    const unlisten = listen("tauri://drag-drop", async (event: any) => {
+      const { paths, position } = event.payload;
+
+      if (paths && paths.length > 0) {
+        const droppedPath = paths[0]; // Handle first item
+        const { x } = position; // We only really care about X for the column check
+
+        try {
+          const info = await stat(droppedPath);
+
+          // --- ROBUST ZONE CALCULATION ---
+          // Layout: Source (Flex) | Dest (Flex) | Inspector (Fixed 400px)
+          // We calculate the boundary lines based on the current window width.
+
+          // FIX: NORMALIZE COORDINATES FOR HIGH-DPI SCREENS
+          // The OS sends physical pixels, but CSS uses logical pixels.
+          // We must divide by the devicePixelRatio (e.g., 2.0 on Retina/4K).
+          const scaleFactor = window.devicePixelRatio || 1;
+          const logicalX = x / scaleFactor;
+
+          const inspectorWidth = 400;
+          const availableWidth = window.innerWidth - inspectorWidth;
+          const midPoint = availableWidth / 2;
+
+          const isOverSource = logicalX < midPoint;
+          const isOverDest = logicalX >= midPoint && logicalX < availableWidth;
+
+          // --- LOGIC: SOURCE DROP ---
+          if (isOverSource) {
+            if (info.isDirectory) {
+              console.log("📂 Folder Dropped on Source:", droppedPath);
+              setSourcePath(droppedPath);
+            } else {
+              // FILE DROPPED -> LOAD PARENT & SELECT FILE
+              const parentPath = await dirname(droppedPath);
+              const fileName = await basename(droppedPath);
+
+              console.log("📄 File Dropped on Source. Parent:", parentPath);
+
+              // 1. Set Path
+              setSourcePath(parentPath);
+
+              // 2. Auto-Select this file (overriding previous selections)
+              setCheckedFiles(new Set([fileName]));
+            }
+          }
+
+          // --- LOGIC: DESTINATION DROP ---
+          else if (isOverDest) {
+            if (info.isDirectory) {
+              console.log("📂 Folder Dropped on Dest:", droppedPath);
+              setDestPath(droppedPath);
+            } else {
+              // FILE DROPPED -> SET PARENT AS DEST
+              const parentPath = await dirname(droppedPath);
+              console.log("📄 File Dropped on Dest. Using Parent:", parentPath);
+              setDestPath(parentPath);
+            }
+          }
+        } catch (err) {
+          console.error("Drop Error:", err);
+        }
+      }
+    });
+
+    return () => {
+      unlisten.then((f) => f());
+    };
   }, []);
 
   // 2. AUTO-SCAN TRIGGERS
@@ -79,7 +162,10 @@ function App() {
       )}
 
       {/* --- LEFT PANEL: SOURCE --- */}
-      <div className="flex-1 flex flex-col border-r border-zinc-800 min-w-[350px] relative">
+      <div
+        ref={sourcePanelRef}
+        className="flex-1 flex flex-col border-r border-zinc-800 min-w-[350px] relative transition-colors hover:bg-zinc-900/10"
+      >
         <div className="h-12 border-b border-zinc-800 flex items-center justify-between px-4 bg-zinc-900/50 shrink-0">
           <span className="font-bold text-sm tracking-wide text-zinc-100">
             SOURCE
@@ -131,7 +217,10 @@ function App() {
       </div>
 
       {/* --- CENTER PANEL: DESTINATION --- */}
-      <div className="flex-1 flex flex-col min-w-[350px] bg-zinc-900/10 relative">
+      <div
+        ref={destPanelRef}
+        className="flex-1 flex flex-col min-w-[350px] bg-zinc-900/10 relative transition-colors hover:bg-zinc-900/20"
+      >
         {/* Header with UNMOUNT BUTTON */}
         <div className="h-12 border-b border-zinc-800 flex items-center justify-between px-4 bg-zinc-900/50 shrink-0">
           <span className="font-bold text-sm tracking-wide text-zinc-100">
@@ -186,7 +275,7 @@ function App() {
 
         {/* --- JOB DRAWER (Stacked in Flex Column) --- */}
         <JobDrawer
-          key={transferStartTime || "idle"} // <--- 2. THE FIX: Force remount on reset
+          key={transferStartTime || "idle"}
           isTransferring={isTransferring}
           currentFile={currentFile}
           currentFileBytes={currentFileBytes}
