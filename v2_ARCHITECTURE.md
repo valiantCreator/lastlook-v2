@@ -134,6 +134,9 @@ _Reusable Logic Layer encapsulating side effects._
     - **State Management:** Updates the Store's `completedBytes` for the global progress bar.
     - **Responsiveness:** Manually sets `progress` to 100% immediately upon Rust command success to mask the async gap.
     - **Cleanup:** Triggers `resetJobMetrics()` after a 1-second delay to reset the UI.
+    - **Session Metadata:** At the start of a transfer, fetches the Hostname, OS Type, and App Version to tag the manifest.
+    - **Hash Capture:** Receiving the calculated `xxHash` string from the Rust backend's `copy_file` command upon success.
+    - **Manifest Integration:** Calls `updateManifest()` immediately after a successful transfer to write the file's data and hash to the destination's JSON receipt.
   - **Dependencies:** `appStore`, `@tauri-apps/api/core`
 - **`useMedia.ts`**
   - **Purpose:** Determines how to preview a selected file.
@@ -160,14 +163,32 @@ _Global State Management (Zustand)._
     - **`checkAllMissing()`**: Diff logic that auto-selects all files in Source that are NOT in the `destFiles` set.
     - **`setCheckedFiles()`**: Programmatically sets the selection set (used for auto-selecting dropped files).
 
+#### Types (`src/types/`)
+
+_TypeScript definitions for data structures._
+
+- **`manifest.ts`**
+  - **Purpose:** Defines the strict schema for the "Digital Receipt" JSON file.
+  - **Key Interfaces:**
+    - **`ManifestFile`**: The root structure containing session metadata (machine name, OS, app version) and the array of files.
+    - **`ManifestEntry`**: The structure for an individual file record, including its relative path, source path, size, timestamp, and xxHash-64 checksum.
+
 #### Utils (`src/utils/`)
 
 _Pure functions for formatting._
 
 - **`formatters.ts`**
+
   - **`formatSize(bytes)`**: Converts raw integers to readable strings (e.g., "1024" -> "1.0 KB").
   - **`formatDuration(ms)`**: Converts milliseconds to "MM:SS" or "HH:MM:SS".
   - **`formatDate(date)`**: Standardizes timestamp display.
+
+- **`manifest.ts`**
+  - **Purpose:** The "Digital Receipt" engine.
+  - **Logic:**
+    - **Upsert:** Checks for an existing `lastlook_manifest.json` in the destination. If found, it reads, parses, and appends the new entry. If missing, it creates a new one.
+    - **Path Normalization:** Converts Windows backslashes (`\`) to forward slashes (`/`) in the `source_path` to ensure the JSON is clean and cross-platform compatible.
+    - **Safety:** Performing this operation in the frontend utility layer prevents blocking the main Rust transfer threads.
 
 ### 2.3 Backend (`src-tauri/`)
 
@@ -185,19 +206,23 @@ _The Rust Core environment._
 - **`capabilities/default.json`**
   - **Purpose:** Granular Permission Control Layer (Tauri v2).
   - **Scopes:**
-    - `fs:allow-read`: Scoped to `["**"]` (Global Read) to allow Drag & Drop from any external drive or location without prior dialog selection.
+    - `fs:allow-read`: Scoped to `["**"]` (Global Read) to allow Drag & Drop from any external drive or location without prior dialog selection. Explicitly enabled to allow the creation and update of `lastlook_manifest.json`.
     - `shell:allow-execute`: Strictly limits execution to the specific sidecar binaries defined in config.
+    - `os:allow-hostname`, `os:allow-os-type`, `os:allow-version`: explicitly enabled to gather machine identity for the manifest audit trail.
 - **`src/main.rs`**
   - **Purpose:** Entry point. Initializes the Tauri builder, registers plugins (`fs`, `dialog`, `shell`), and runs the app.
 - **`src/lib.rs`**
   - **Purpose:** The Application Logic Library.
   - **Commands:**
     - **`calculate_hash`**: Uses the `xxhash-rust` crate (xxh3) with a 64MB buffer for maximum throughput.
-    - **`copy_file`**: Implements streamed copying with on-the-fly xxHash-64 verification. Includes **"Destructive Cancellation"** safety logic to drop file handles and delete partial data if aborted.
+    - **`copy_file`**: Implements streamed copying with on-the-fly xxHash-64 verification. Includes **"Destructive Cancellation"** safety logic to drop file handles and delete partial data if aborted. Updated to return the final, verified `xxHash-64` string to the frontend upon successful completion, which is then used for the manifest.
     - **Timestamp Preservation:** Explicitly applies `fs::set_modified` to destination files post-transfer to ensure metadata parity for Smart Resume.
     - **`get_video_metadata`**: Spawns `ffprobe` with JSON output args to parse resolution/fps.
     - **`generate_thumbnail`**: Spawns `ffmpeg` to seek to 00:01 and output a single frame to the OS Temp directory.
     - **`clean_video_cache`**: Recursively wipes the temp directory to prevent storage bloat.
+- **`Cargo.toml` / `Cargo.lock`**
+  - **Purpose:** Rust dependency management.
+  - **Changes:** Added `tauri-plugin-os` to allow querying the operating system for the machine's hostname and version information.
 
 ---
 
