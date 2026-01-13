@@ -65,6 +65,21 @@ fn cancel_transfer(state: tauri::State<TransferState>) {
     state.abort_flag.store(true, Ordering::Relaxed);
 }
 
+// --- NEW COMMAND: DELETE FILES (Sprint 4) ---
+#[tauri::command]
+async fn delete_files(paths: Vec<String>) -> Result<(), String> {
+    for path_str in paths {
+        let path = Path::new(&path_str);
+        // Only delete if it exists to avoid errors on race conditions
+        if path.exists() {
+            println!("🗑️ Deleting file: {:?}", path);
+            fs::remove_file(path).map_err(|e| format!("Failed to delete {:?}: {}", path, e))?;
+        }
+    }
+    Ok(())
+}
+// --------------------------------------------
+
 #[tauri::command]
 async fn calculate_hash(path: String) -> Result<String, String> {
     let path = Path::new(&path);
@@ -330,7 +345,8 @@ pub fn run() {
             cancel_transfer,
             generate_thumbnail,
             get_video_metadata,
-            clean_video_cache // <--- REGISTERED NEW COMMAND
+            clean_video_cache,
+            delete_files // <--- REGISTERED NEW COMMAND (Sprint 4)
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

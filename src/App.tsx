@@ -7,6 +7,7 @@ import { DestFileList } from "./components/DestFileList";
 import { Inspector } from "./components/Inspector";
 import { useTransfer } from "./hooks/useTransfer";
 import { ConflictModal } from "./components/ConflictModal";
+import { DeleteModal } from "./components/DeleteModal"; // <--- NEW IMPORT
 import { JobDrawer } from "./components/JobDrawer";
 import { listen } from "@tauri-apps/api/event"; // <--- RESTORED LISTENER
 import { stat } from "@tauri-apps/plugin-fs";
@@ -160,6 +161,10 @@ function App() {
           onCancel={() => setConflicts([])}
         />
       )}
+
+      {/* --- NEW: DELETE MODAL (Red Zone) --- */}
+      <DeleteModal />
+      {/* ------------------------------------ */}
 
       {/* --- LEFT PANEL: SOURCE --- */}
       <div

@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { DirEntry } from "@tauri-apps/plugin-fs";
-import { ManifestEntry } from "../types/manifest"; // <--- NEW IMPORT
+import { ManifestEntry } from "../types/manifest";
+import { invoke } from "@tauri-apps/api/core"; // <--- NEW IMPORT
 
 interface AppState {
   // DATA
@@ -12,7 +13,7 @@ interface AppState {
   verifyingFiles: Set<string>;
 
   // MANIFEST STATE (The "Brain" for Sprint 3)
-  manifestMap: Map<string, ManifestEntry>; // <--- NEW STATE
+  manifestMap: Map<string, ManifestEntry>;
 
   selectedFile: DirEntry | null;
   selectedFileOrigin: "source" | "dest" | null;
@@ -20,6 +21,10 @@ interface AppState {
 
   // CONFLICT STATE
   conflicts: string[];
+
+  // --- DELETE MODAL STATE (Sprint 4 Refinement) ---
+  isDeleteModalOpen: boolean; // <--- NEW
+  filesToDelete: string[]; // <--- NEW
 
   // --- JOB DRAWER STATE ---
   isDrawerOpen: boolean;
@@ -33,7 +38,7 @@ interface AppState {
   setFileList: (files: DirEntry[]) => void;
   setDestFiles: (files: Set<string>) => void;
 
-  setManifestMap: (map: Map<string, ManifestEntry>) => void; // <--- NEW ACTION
+  setManifestMap: (map: Map<string, ManifestEntry>) => void;
 
   addVerifyingFile: (filename: string) => void;
   removeVerifyingFile: (filename: string) => void;
@@ -55,6 +60,11 @@ interface AppState {
   clearChecked: () => void;
   resetSource: () => void;
 
+  // --- DELETE ACTIONS (SPRINT 4) ---
+  deleteSourceFiles: (filenames: string[]) => Promise<void>; // <--- NEW ACTION
+  openDeleteModal: (filenames: string[]) => void; // <--- NEW ACTION
+  closeDeleteModal: () => void; // <--- NEW ACTION
+
   // --- UTILITY ACTIONS ---
   swapPaths: () => void;
 
@@ -75,11 +85,15 @@ export const useAppStore = create<AppState>((set, get) => ({
   destFiles: new Set(),
   verifiedFiles: new Set(),
   verifyingFiles: new Set(),
-  manifestMap: new Map(), // <--- INITIALIZE
+  manifestMap: new Map(),
   selectedFile: null,
   selectedFileOrigin: null,
   checkedFiles: new Set(),
   conflicts: [],
+
+  // --- DELETE MODAL DEFAULTS ---
+  isDeleteModalOpen: false,
+  filesToDelete: [],
 
   // Drawer Defaults
   isDrawerOpen: false,
@@ -92,7 +106,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setDestPath: (path) => set({ destPath: path }),
   setFileList: (files) => set({ fileList: files }),
   setDestFiles: (files) => set({ destFiles: files }),
-  setManifestMap: (map) => set({ manifestMap: map }), // <--- IMPLEMENT
+  setManifestMap: (map) => set({ manifestMap: map }),
 
   addVerifyingFile: (filename) =>
     set((state) => {
@@ -145,6 +159,65 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   clearChecked: () => set({ checkedFiles: new Set() }),
 
+  // --- DELETE IMPLEMENTATION (SPRINT 4) ---
+  deleteSourceFiles: async (filenames: string[]) => {
+    const { sourcePath, manifestMap, fileList, checkedFiles } = get();
+
+    if (!sourcePath) return;
+
+    // 1. THE TRIPLE CHECK (Gatekeeper)
+    // Only allow files that are strictly present in the Manifest (Verified)
+    const safeToDelete = filenames.filter((name) => manifestMap.has(name));
+
+    if (safeToDelete.length === 0) {
+      console.warn("🚫 Delete Aborted: No verified files selected.");
+      return;
+    }
+
+    console.log(
+      `🗑️ Attempting to delete ${safeToDelete.length} verified files...`
+    );
+
+    // 2. PREPARE PATHS
+    // Normalize path separators if needed, though Rust usually handles mixed well
+    const fullPaths = safeToDelete.map(
+      (name) => `${sourcePath}${sourcePath.endsWith("\\") ? "" : "\\"}${name}`
+    );
+
+    try {
+      // 3. CALL BACKEND (The Executioner)
+      // We will create this command in Step 2
+      await invoke("delete_files", { paths: fullPaths });
+
+      // 4. UPDATE STATE (Optimistic UI)
+      // Remove deleted files from the list so the UI updates instantly
+      const newFileList = fileList.filter(
+        (f) => !safeToDelete.includes(f.name)
+      );
+
+      // Also uncheck them
+      const newChecked = new Set(checkedFiles);
+      safeToDelete.forEach((name) => newChecked.delete(name));
+
+      set({
+        fileList: newFileList,
+        checkedFiles: newChecked,
+        selectedFile: null, // Deselect to avoid errors
+      });
+
+      console.log("✅ Delete Successful");
+    } catch (err) {
+      console.error("❌ Delete Failed:", err);
+      throw err; // Re-throw so the UI can show an error toast if we add one later
+    }
+  },
+
+  openDeleteModal: (filenames) =>
+    set({ isDeleteModalOpen: true, filesToDelete: filenames }),
+
+  closeDeleteModal: () => set({ isDeleteModalOpen: false, filesToDelete: [] }),
+  // ----------------------------------------
+
   // --- UTILITY ACTIONS ---
   swapPaths: () =>
     set((state) => ({
@@ -155,7 +228,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       destFiles: new Set(),
       verifiedFiles: new Set(),
       verifyingFiles: new Set(),
-      manifestMap: new Map(), // <--- CLEAR ON SWAP
+      manifestMap: new Map(),
       checkedFiles: new Set(),
       selectedFile: null,
       selectedFileOrigin: null,

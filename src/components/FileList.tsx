@@ -28,9 +28,24 @@ export function FileList({
     checkAllMissing,
     destPath,
     manifestMap, // <--- NEW: Access the Manifest Brain
+    openDeleteModal, // <--- NEW: Open the Red Zone
   } = useAppStore();
 
   const activeRef = useRef<HTMLDivElement>(null);
+
+  // --- DELETE LOGIC ---
+  // Calculate how many selected files are actually safe to delete
+  const verifiedSelection = Array.from(checkedFiles).filter((name) =>
+    manifestMap.has(name)
+  );
+  const canDelete = verifiedSelection.length > 0;
+
+  const handleFreeSpace = () => {
+    if (!canDelete) return;
+    // Hand off to the safety modal
+    openDeleteModal(verifiedSelection);
+  };
+  // --------------------
 
   useEffect(() => {
     if (activeRef.current) {
@@ -99,7 +114,7 @@ export function FileList({
         ))}
       </div>
 
-      <div className="p-3 bg-zinc-900 border-t border-zinc-800 flex justify-between items-center shrink-0">
+      <div className="p-3 bg-zinc-900 border-t border-zinc-800 flex justify-between items-center shrink-0 gap-2">
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -114,8 +129,29 @@ export function FileList({
               }
             `}
         >
-          Select All Missing Files
+          Select All Missing
         </button>
+
+        {/* --- NEW: FREE UP SPACE BUTTON --- */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            handleFreeSpace();
+          }}
+          disabled={!canDelete}
+          className={`text-[10px] px-3 py-1.5 rounded border transition-colors flex-1 text-center font-medium
+            ${
+              canDelete
+                ? "bg-red-900/20 border-red-900/50 text-red-400 hover:bg-red-900/40 hover:text-red-300 cursor-pointer"
+                : "bg-zinc-800/20 border-zinc-800 text-zinc-700 cursor-not-allowed"
+            }
+          `}
+        >
+          {canDelete
+            ? `Free Up Space (${verifiedSelection.length})`
+            : "Free Up Space"}
+        </button>
+        {/* --------------------------------- */}
 
         <button
           onClick={(e) => {

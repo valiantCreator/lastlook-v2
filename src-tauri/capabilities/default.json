@@ -30,6 +30,10 @@
     {
       "identifier": "fs:allow-write-text-file",
       "allow": ["**"]
+    },
+    {
+      "identifier": "fs:allow-remove",
+      "allow": ["**"]
     }
   ]
 }

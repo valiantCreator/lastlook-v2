@@ -81,6 +81,10 @@ _Pure UI elements (Presentation Layer)._
     - **Virtualization/Refs:** Uses refs to manage scrolling behavior.
     - **Click-to-Deselect:** Wraps the list in a click handler that clears the selection if the user clicks the "empty space" background.
     - **Context:** Explicitly passes `origin="source"` to child rows to context-switch the Inspector logic.
+  - **Visual Logic:**
+    - **Standard:** Green Dot (Synced to Dest), Grey Dot (Not Synced).
+    - **Verified Upgrade:** If a file exists in `destFiles` AND `manifestMap`, the dot is replaced by a **Green Shield**.
+  - **Meaning:** "This file is safely backed up and verified. It is safe to delete from the source."
   - **Dependencies:** `FileRow.tsx`, `DirEntry` (type), `appStore`
 - **`DestFileList.tsx`**
   - **Purpose:** Renders the destination file list with comparison logic.
@@ -88,6 +92,10 @@ _Pure UI elements (Presentation Layer)._
     - **Comparison:** Iterates through `destFiles` (Set) and compares against the Source list to determine file status (Synced vs Orphan).
     - **Filters:** Implements a local state toggle to "Hide Orphans" (files present in Dest but missing in Source).
     - **Visuals:** Renders "Green Dots" for synced files and "Red/Grey" indicators for orphans.
+    - **Visual Logic:** Context-Aware Shields.
+    - **Green Shield:** File is Verified in Manifest + Exists in current Source (Active Match).
+    - **Red/Grey Dot:** File is in Destination but NOT in current Source (Orphan).
+  - **UX Goal:** Prevents false positives. A "Green Shield" specifically implies an active, successful link between the currently connected drives.
   - **Dependencies:** `appStore`
 - **`FileRow.tsx`**
   - **Purpose:** A memoized row component representing a single file.
@@ -120,6 +128,11 @@ _Reusable Logic Layer encapsulating side effects._
 
 - **`useFileSystem.ts`**
   - **Purpose:** Abstracts Tauri's File System plugins.
+  - **Logic:**
+    - **`scanDest(path)`**: Now performs a dual-scan.
+      1. Reads the physical directory to populate `destFiles` (Physical Reality).
+      2. Reads `lastlook_manifest.json` to populate `manifestMap` (Verification Truth).
+    - **State Sync:** Ensures both physical presence and verification status are available to the UI simultaneously.
   - **Key Functions:**
     - `selectSource()`: Opens native folder picker.
     - `scanSource()`: Reads `DirEntry[]` and sorts folders-first.
@@ -162,6 +175,10 @@ _Global State Management (Zustand)._
     - **`resetJobMetrics()`**: Resets `transferStartTime` to `null` and bytes to `0`. This is the signal for the UI to "clean up" after a job.
     - **`checkAllMissing()`**: Diff logic that auto-selects all files in Source that are NOT in the `destFiles` set.
     - **`setCheckedFiles()`**: Programmatically sets the selection set (used for auto-selecting dropped files).
+- **`manifestMap`**
+  - **Type:** `Map<string, ManifestEntry>`
+  - **Purpose:** A high-performance lookup table for verified files.
+  - **Flow:** Populated by `loadManifest` when a destination is mounted. Used by UI components to instantly determine if a file deserves a "Shield Icon" without iterating through arrays.
 
 #### Types (`src/types/`)
 
