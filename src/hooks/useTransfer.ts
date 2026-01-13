@@ -6,6 +6,7 @@ import { useAppStore } from "../store/appStore";
 import { type, hostname } from "@tauri-apps/plugin-os";
 import { getVersion } from "@tauri-apps/api/app";
 import { updateManifest } from "../utils/manifest";
+import { ManifestEntry } from "../types/manifest"; // <--- Ensure this is imported if needed, though we construct it inline below
 
 interface ProgressEvent {
   filename: string;
@@ -36,6 +37,7 @@ export function useTransfer() {
     addCompletedBytes,
     setTransferStartTime,
     resetJobMetrics,
+    upsertManifestEntry, // <--- NEW: REACTIVE FIX
   } = useAppStore();
 
   const [isTransferring, setIsTransferring] = useState(false);
@@ -282,31 +284,33 @@ export function useTransfer() {
             dest: fullDest,
           });
 
+          // --- FIX: EXPLICIT TYPING FOR MANIFEST ENTRY ---
+          const manifestEntry: ManifestEntry = {
+            filename: file.name,
+            rel_path: file.name,
+            source_path: fullSource.replace(/\\/g, "/"),
+            size_bytes: fileSize,
+            modified_timestamp: sourceStats?.mtime
+              ? new Date(sourceStats.mtime).getTime()
+              : Date.now(),
+            hash_type: "xxh3_64", // TypeScript will now accept this
+            hash_value: hash,
+            status: "verified", // And this
+            verified_at: new Date().toISOString(),
+          };
+
           // --- CHANGE: MANIFEST UPDATE ---
           // Update the Digital Receipt immediately
-          await updateManifest(
-            destPath!,
-            {
-              filename: file.name,
-              rel_path: file.name,
-              source_path: fullSource.replace(/\\/g, "/"), // <--- FIXED: Normalize to Forward Slashes
-              size_bytes: fileSize,
-              modified_timestamp: sourceStats?.mtime
-                ? new Date(sourceStats.mtime).getTime()
-                : Date.now(),
-              hash_type: "xxh3_64",
-              hash_value: hash, // The hash from Rust
-              status: "verified",
-              verified_at: new Date().toISOString(),
-            },
-            {
-              machineName,
-              os: osType,
-              appVersion: appVer,
-              sessionId,
-            }
-          );
-          // -------------------------------
+          await updateManifest(destPath!, manifestEntry, {
+            machineName,
+            os: osType,
+            appVersion: appVer,
+            sessionId,
+          });
+
+          // --- NEW: REACTIVE UPDATE (THE FIX) ---
+          upsertManifestEntry(manifestEntry); // <--- Updates UI Shield instantly
+          // --------------------------------------
 
           // --- FIX: SNAP UI TO DONE IMMEDIATELY ---
           // This forces the bar to 100% green the moment Rust returns success

@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { DirEntry } from "@tauri-apps/plugin-fs";
 import { ManifestEntry } from "../types/manifest";
-import { invoke } from "@tauri-apps/api/core"; // <--- NEW IMPORT
+import { invoke } from "@tauri-apps/api/core";
 
 interface AppState {
   // DATA
@@ -23,8 +23,8 @@ interface AppState {
   conflicts: string[];
 
   // --- DELETE MODAL STATE (Sprint 4 Refinement) ---
-  isDeleteModalOpen: boolean; // <--- NEW
-  filesToDelete: string[]; // <--- NEW
+  isDeleteModalOpen: boolean;
+  filesToDelete: string[];
 
   // --- JOB DRAWER STATE ---
   isDrawerOpen: boolean;
@@ -39,6 +39,7 @@ interface AppState {
   setDestFiles: (files: Set<string>) => void;
 
   setManifestMap: (map: Map<string, ManifestEntry>) => void;
+  upsertManifestEntry: (entry: ManifestEntry) => void; // <--- NEW ACTION (Reactive Fix)
 
   addVerifyingFile: (filename: string) => void;
   removeVerifyingFile: (filename: string) => void;
@@ -61,9 +62,9 @@ interface AppState {
   resetSource: () => void;
 
   // --- DELETE ACTIONS (SPRINT 4) ---
-  deleteSourceFiles: (filenames: string[]) => Promise<void>; // <--- NEW ACTION
-  openDeleteModal: (filenames: string[]) => void; // <--- NEW ACTION
-  closeDeleteModal: () => void; // <--- NEW ACTION
+  deleteSourceFiles: (filenames: string[]) => Promise<void>;
+  openDeleteModal: (filenames: string[]) => void;
+  closeDeleteModal: () => void;
 
   // --- UTILITY ACTIONS ---
   swapPaths: () => void;
@@ -107,6 +108,15 @@ export const useAppStore = create<AppState>((set, get) => ({
   setFileList: (files) => set({ fileList: files }),
   setDestFiles: (files) => set({ destFiles: files }),
   setManifestMap: (map) => set({ manifestMap: map }),
+
+  // --- REACTIVE MANIFEST UPDATE ---
+  upsertManifestEntry: (entry) =>
+    set((state) => {
+      const newMap = new Map(state.manifestMap);
+      newMap.set(entry.filename, entry);
+      return { manifestMap: newMap };
+    }),
+  // --------------------------------
 
   addVerifyingFile: (filename) =>
     set((state) => {

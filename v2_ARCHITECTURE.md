@@ -114,6 +114,11 @@ _Pure UI elements (Presentation Layer)._
 - **`ConflictModal.tsx`**
   - **Purpose:** A high-z-index overlay blocking interaction when naming collisions occur.
   - **Logic:** Provides 3 resolution paths: `Overwrite`, `Skip`, or `Cancel`. Maps directly to `useTransfer` resolution handlers.
+- **`DeleteModal.tsx`** (The "Red Zone")
+  - **Purpose:** The final safety barrier before data destruction.
+  - **Logic:**
+    - **Safety Check:** Before the delete button enables, the component iterates through the file list and performs a live `fs.exists()` check on the **Destination Drive**.
+    - **Enforcement:** Only files that return `true` (confirmed physically present on backup right now) are allowed to be deleted.
 - **`JobDrawer.tsx`**
   - **Purpose:** The persistent footer controller for active transfers.
   - **Logic:**
@@ -150,6 +155,9 @@ _Reusable Logic Layer encapsulating side effects._
     - **Session Metadata:** At the start of a transfer, fetches the Hostname, OS Type, and App Version to tag the manifest.
     - **Hash Capture:** Receiving the calculated `xxHash` string from the Rust backend's `copy_file` command upon success.
     - **Manifest Integration:** Calls `updateManifest()` immediately after a successful transfer to write the file's data and hash to the destination's JSON receipt.
+    - **Reactive Logic:**
+      - Immediately after `updateManifest` writes to disk, the hook calls `store.upsertManifestEntry()`.
+      - **Purpose:** Ensures the UI (Shield Icons, Delete Buttons) reflects the new verification status instantly, preventing the need for a manual refresh.
   - **Dependencies:** `appStore`, `@tauri-apps/api/core`
 - **`useMedia.ts`**
   - **Purpose:** Determines how to preview a selected file.
@@ -179,6 +187,9 @@ _Global State Management (Zustand)._
   - **Type:** `Map<string, ManifestEntry>`
   - **Purpose:** A high-performance lookup table for verified files.
   - **Flow:** Populated by `loadManifest` when a destination is mounted. Used by UI components to instantly determine if a file deserves a "Shield Icon" without iterating through arrays.
+- **`isDeleteModalOpen`** / **`filesToDelete`**
+  - **Purpose:** Manages the "Red Zone" overlay state.
+  - **Flow:** Triggered by `FileList`, cleared by `DeleteModal` upon completion or cancel.
 
 #### Types (`src/types/`)
 
@@ -226,6 +237,7 @@ _The Rust Core environment._
     - `fs:allow-read`: Scoped to `["**"]` (Global Read) to allow Drag & Drop from any external drive or location without prior dialog selection. Explicitly enabled to allow the creation and update of `lastlook_manifest.json`.
     - `shell:allow-execute`: Strictly limits execution to the specific sidecar binaries defined in config.
     - `os:allow-hostname`, `os:allow-os-type`, `os:allow-version`: explicitly enabled to gather machine identity for the manifest audit trail.
+    - **`fs:allow-remove`**: Explicitly enabled to allow the deletion of source files. This is the most sensitive permission in the application.
 - **`src/main.rs`**
   - **Purpose:** Entry point. Initializes the Tauri builder, registers plugins (`fs`, `dialog`, `shell`), and runs the app.
 - **`src/lib.rs`**
@@ -237,6 +249,9 @@ _The Rust Core environment._
     - **`get_video_metadata`**: Spawns `ffprobe` with JSON output args to parse resolution/fps.
     - **`generate_thumbnail`**: Spawns `ffmpeg` to seek to 00:01 and output a single frame to the OS Temp directory.
     - **`clean_video_cache`**: Recursively wipes the temp directory to prevent storage bloat.
+    - **`delete_files(paths: Vec<String>)`**
+      - **Purpose:** Permanently removes files from the source drive.
+      - **Safety:** This command is "dumb"—it deletes what it is told. Safety is enforced by the Frontend "Gatekeeper" (Store) which filters inputs before calling this.
 - **`Cargo.toml` / `Cargo.lock`**
   - **Purpose:** Rust dependency management.
   - **Changes:** Added `tauri-plugin-os` to allow querying the operating system for the machine's hostname and version information.
