@@ -101,3 +101,36 @@ export async function updateManifest(
     // or make the user think the transfer failed. It's a "soft" error.
   }
 }
+
+/**
+ * Loads the manifest from the destination folder and returns a Map for fast lookup.
+ * Returns an empty Map if the file is missing or corrupt.
+ */
+export async function loadManifest(
+  destFolder: string
+): Promise<Map<string, ManifestEntry>> {
+  const map = new Map<string, ManifestEntry>();
+
+  try {
+    const manifestPath = await join(destFolder, MANIFEST_FILENAME);
+    const fileExists = await exists(manifestPath);
+
+    if (!fileExists) {
+      return map; // Return empty map (no verification data yet)
+    }
+
+    const content = await readTextFile(manifestPath);
+    const manifest: ManifestFile = JSON.parse(content);
+
+    // Populate the Map for O(1) lookup
+    manifest.files.forEach((entry) => {
+      map.set(entry.filename, entry);
+    });
+
+    console.log(`📖 Loaded Manifest: ${map.size} verified files found.`);
+    return map;
+  } catch (err) {
+    console.warn("⚠️ Failed to load manifest (ignoring):", err);
+    return map; // Safe fallback
+  }
+}

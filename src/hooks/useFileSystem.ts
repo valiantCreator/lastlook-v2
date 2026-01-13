@@ -1,11 +1,18 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { readDir } from "@tauri-apps/plugin-fs";
 import { useAppStore } from "../store/appStore";
-import { invoke } from "@tauri-apps/api/core"; // <--- ADDED IMPORT
+import { invoke } from "@tauri-apps/api/core";
+import { loadManifest } from "../utils/manifest"; // <--- NEW IMPORT
 
 export function useFileSystem() {
-  const { setSourcePath, setFileList, setDestPath, resetSource, setDestFiles } =
-    useAppStore();
+  const {
+    setSourcePath,
+    setFileList,
+    setDestPath,
+    resetSource,
+    setDestFiles,
+    setManifestMap, // <--- NEW STORE ACTION
+  } = useAppStore();
 
   // 1. SCAN SOURCE
   async function scanSource() {
@@ -44,9 +51,16 @@ export function useFileSystem() {
         .map((e) => e.name);
 
       setDestFiles(new Set(fileNames));
+
+      // --- NEW: LOAD MANIFEST DATA ---
+      // Immediately load the receipt so the UI can show Shields 🛡️
+      const map = await loadManifest(path);
+      setManifestMap(map);
+      // -------------------------------
     } catch (err) {
       console.error("Failed to read destination:", err);
       setDestFiles(new Set());
+      setManifestMap(new Map()); // Safety clear
     }
   }
 
@@ -79,7 +93,7 @@ export function useFileSystem() {
 
       if (selected && typeof selected === "string") {
         setDestPath(selected);
-        // Trigger the scan immediately to update Green Dots
+        // Trigger the scan immediately to update Green Dots AND Manifest
         scanDest(selected);
       }
     } catch (err) {
@@ -95,6 +109,7 @@ export function useFileSystem() {
   function unmountDest() {
     setDestPath(null);
     setDestFiles(new Set());
+    setManifestMap(new Map()); // <--- CLEAR MANIFEST
   }
 
   // 6. CACHE CLEANER (NEW)
@@ -114,6 +129,6 @@ export function useFileSystem() {
     scanDest,
     clearSource,
     unmountDest,
-    clearTempCache, // <--- EXPORTED
+    clearTempCache,
   };
 }

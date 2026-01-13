@@ -27,6 +27,7 @@ export function FileList({
     toggleChecked,
     checkAllMissing,
     destPath,
+    manifestMap, // <--- NEW: Access the Manifest Brain
   } = useAppStore();
 
   const activeRef = useRef<HTMLDivElement>(null);
@@ -82,6 +83,10 @@ export function FileList({
             isSynced={destFiles.has(file.name)}
             isVerified={verifiedFiles.has(file.name)}
             isVerifying={verifyingFiles.has(file.name)}
+            // --- NEW PROP: CHECK MANIFEST ---
+            isManifestVerified={manifestMap.has(file.name)}
+            // --------------------------------
+
             hasDest={!!destPath}
             isSelected={selectedFile?.name === file.name}
             isChecked={checkedFiles.has(file.name)}

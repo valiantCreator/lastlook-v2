@@ -6,6 +6,10 @@ interface FileRowProps {
   isSynced: boolean;
   isVerified: boolean;
   isVerifying: boolean;
+
+  // --- NEW PROP ---
+  isManifestVerified: boolean; // <--- Controlled by parent
+
   hasDest: boolean;
   isSelected: boolean;
   isChecked: boolean;
@@ -21,6 +25,7 @@ export const FileRow = forwardRef<HTMLDivElement, FileRowProps>(
       isSynced,
       isVerified,
       isVerifying,
+      isManifestVerified, // <--- Destructure
       hasDest,
       isSelected,
       isChecked,
@@ -40,10 +45,12 @@ export const FileRow = forwardRef<HTMLDivElement, FileRowProps>(
         "bg-yellow-500/10 border-yellow-500/20 shadow-[inset_0_0_10px_rgba(234,179,8,0.05)]";
     }
 
+    // Consolidated Verified State (Session OR Manifest)
+    const showVerifiedState = isVerified || isManifestVerified;
+
     return (
       <div
         ref={ref}
-        // UPDATE: Pass the event 'e' to the handler
         onClick={(e) => onSelect(e)}
         className={`
         flex items-center gap-3 p-2 rounded cursor-pointer group transition-all duration-300 border select-none w-full
@@ -86,24 +93,40 @@ export const FileRow = forwardRef<HTMLDivElement, FileRowProps>(
           <div className="w-4 h-4 shrink-0" />
         )}
 
-        {/* TRAFFIC LIGHT DOT */}
-        {/* PRIORITY: Verifying -> Directory -> Synced -> Missing (Red) OR Neutral (Grey) */}
-        <div
-          className={`w-2 h-2 rounded-full shadow-[0_0_8px_rgba(0,0,0,0.5)] transition-all duration-300 shrink-0
-          ${
-            isVerifying
-              ? "bg-yellow-400 shadow-yellow-500/50 animate-pulse"
-              : file.isDirectory
-              ? "bg-blue-500 shadow-blue-900/50"
-              : isSynced
-              ? "bg-emerald-500 shadow-emerald-500/50"
-              : hasDest
-              ? "bg-red-500/50 shadow-red-900/20" // Show Red if missing from Dest
-              : "bg-zinc-600 shadow-zinc-900/50" // Show Grey if no Dest
-          }
-          ${isSelected ? "scale-125" : ""} 
-        `}
-        />
+        {/* STATUS ICON (DOT OR SHIELD) */}
+        {showVerifiedState ? (
+          // --- VERIFIED STATE (SHIELD REPLACES DOT) ---
+          <svg
+            className="w-3 h-3 text-emerald-500 shrink-0"
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+          >
+            <path
+              fillRule="evenodd"
+              d="M12.516 2.17a.75.75 0 00-1.032 0 11.209 11.209 0 01-7.877 3.08.75.75 0 00-.722.515A12.74 12.74 0 002.25 9.75c0 5.942 4.064 10.933 9.563 12.348a.749.749 0 00.374 0c5.499-1.415 9.563-6.406 9.563-12.348 0-1.39-.223-2.73-.635-3.985a.75.75 0 00-.722-.516l-.143.001c-2.996 0-5.717-1.17-7.734-3.08zm3.094 8.016a.75.75 0 10-1.22-.872l-3.236 4.53L9.53 12.22a.75.75 0 00-1.06 1.06l2.25 2.25a.75.75 0 001.14-.094l3.75-5.25z"
+              clipRule="evenodd"
+            />
+          </svg>
+        ) : (
+          // --- STANDARD TRAFFIC LIGHT DOT ---
+          <div
+            className={`w-2 h-2 rounded-full shadow-[0_0_8px_rgba(0,0,0,0.5)] transition-all duration-300 shrink-0
+              ${
+                isVerifying
+                  ? "bg-yellow-400 shadow-yellow-500/50 animate-pulse"
+                  : file.isDirectory
+                  ? "bg-blue-500 shadow-blue-900/50"
+                  : isSynced
+                  ? "bg-emerald-500 shadow-emerald-500/50"
+                  : hasDest
+                  ? "bg-red-500/50 shadow-red-900/20" // Show Red if missing from Dest
+                  : "bg-zinc-600 shadow-zinc-900/50" // Show Grey if no Dest
+              }
+              ${isSelected ? "scale-125" : ""} 
+            `}
+          />
+        )}
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
@@ -123,21 +146,6 @@ export const FileRow = forwardRef<HTMLDivElement, FileRowProps>(
             >
               {file.name}
             </p>
-
-            {/* SHIELD ICON */}
-            {isVerified && (
-              <svg
-                className="w-3 h-3 text-emerald-400 animate-in zoom-in duration-300"
-                fill="currentColor"
-                viewBox="0 0 20 20"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                  clipRule="evenodd"
-                />
-              </svg>
-            )}
           </div>
 
           {/* Status Text */}
@@ -156,8 +164,8 @@ export const FileRow = forwardRef<HTMLDivElement, FileRowProps>(
               ? "Folder"
               : isVerifying
               ? "Verifying Integrity..."
-              : isVerified
-              ? "Verified MD5 Match"
+              : showVerifiedState // <--- Updated Text Logic
+              ? "Verified Safe"
               : isSynced
               ? "Synced (Unverified)"
               : hasDest

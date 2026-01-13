@@ -1,12 +1,33 @@
 import { useEffect, useRef, useState } from "react";
 import { useAppStore } from "../store/appStore";
 
+// --- NEW: INLINE SHIELD ICON (No dependencies required) ---
+function ShieldCheckIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={className}
+    >
+      <path
+        fillRule="evenodd"
+        d="M12.516 2.17a.75.75 0 00-1.032 0 11.209 11.209 0 01-7.877 3.08.75.75 0 00-.722.515A12.74 12.74 0 002.25 9.75c0 5.942 4.064 10.933 9.563 12.348a.749.749 0 00.374 0c5.499-1.415 9.563-6.406 9.563-12.348 0-1.39-.223-2.73-.635-3.985a.75.75 0 00-.722-.516l-.143.001c-2.996 0-5.717-1.17-7.734-3.08zm3.094 8.016a.75.75 0 10-1.22-.872l-3.236 4.53L9.53 12.22a.75.75 0 00-1.06 1.06l2.25 2.25a.75.75 0 001.14-.094l3.75-5.25z"
+        clipRule="evenodd"
+      />
+    </svg>
+  );
+}
+// ---------------------------------------------------------
+
 interface DestFileListProps {
   files: Set<string>;
 }
 
 export function DestFileList({ files }: DestFileListProps) {
-  const { selectedFile, setSelectedFile, sourcePath, fileList } = useAppStore();
+  const { selectedFile, setSelectedFile, sourcePath, fileList, manifestMap } =
+    useAppStore();
+
   const [showSyncedOnly, setShowSyncedOnly] = useState(false);
 
   // 1. CALCULATE ORPHANS
@@ -81,6 +102,10 @@ export function DestFileList({ files }: DestFileListProps) {
           const isSelected = selectedFile?.name === filename;
           const isSynced = sourceFileNames.has(filename);
 
+          // --- UPDATED LOGIC: Shield ONLY if in Manifest AND in Source ---
+          const isVerified = manifestMap.has(filename) && isSynced;
+          // -------------------------------------------------------------
+
           return (
             <div
               key={filename}
@@ -108,33 +133,48 @@ export function DestFileList({ files }: DestFileListProps) {
                   }
                 `}
             >
-              {/* SMART DOT LOGIC */}
-              <div
-                className={`w-2 h-2 rounded-full shadow-sm
-                  ${
+              {/* SMART ICON LOGIC (Shield vs Dot) */}
+              {isVerified ? (
+                // --- VERIFIED STATE (SHIELD) ---
+                <ShieldCheckIcon className="w-4 h-4 text-emerald-500 shrink-0" />
+              ) : (
+                // --- UNVERIFIED STATE (DOT) ---
+                <div
+                  className={`w-2 h-2 rounded-full shadow-sm ml-1 shrink-0
+                     ${
+                       !sourcePath
+                         ? "bg-zinc-600 shadow-zinc-900/50" // No Source = Neutral
+                         : isSynced
+                         ? "bg-emerald-500 shadow-emerald-500/50" // Synced = Green
+                         : "bg-red-500 shadow-red-900/50" // Orphan = Red
+                     }
+                   `}
+                  title={
                     !sourcePath
-                      ? "bg-zinc-600 shadow-zinc-900/50" // No Source = Neutral
+                      ? "No Source"
                       : isSynced
-                      ? "bg-emerald-500 shadow-emerald-500/50" // Synced = Green
-                      : "bg-red-500 shadow-red-900/50" // Orphan = Red
+                      ? "Synced (Not Verified)"
+                      : "Orphan (Dest Only)"
                   }
-                `}
-                title={
-                  !sourcePath
-                    ? "No Source"
-                    : isSynced
-                    ? "Synced"
-                    : "Orphan (Dest Only)"
-                }
-              />
+                />
+              )}
 
-              <p
-                className={`text-xs truncate font-medium ${
-                  isSelected ? "text-white" : "text-zinc-400"
-                }`}
-              >
-                {filename}
-              </p>
+              <div className="flex flex-col min-w-0">
+                <p
+                  className={`text-xs truncate font-medium ${
+                    isSelected ? "text-white" : "text-zinc-400"
+                  }`}
+                >
+                  {filename}
+                </p>
+
+                {/* Optional: Show tiny "Verified" text if selected and verified */}
+                {isSelected && isVerified && (
+                  <span className="text-[9px] text-emerald-500 font-bold uppercase tracking-wider leading-none mt-0.5">
+                    Verified
+                  </span>
+                )}
+              </div>
             </div>
           );
         })}

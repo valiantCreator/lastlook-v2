@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { DirEntry } from "@tauri-apps/plugin-fs";
+import { ManifestEntry } from "../types/manifest"; // <--- NEW IMPORT
 
 interface AppState {
   // DATA
@@ -9,8 +10,12 @@ interface AppState {
   destFiles: Set<string>;
   verifiedFiles: Set<string>;
   verifyingFiles: Set<string>;
+
+  // MANIFEST STATE (The "Brain" for Sprint 3)
+  manifestMap: Map<string, ManifestEntry>; // <--- NEW STATE
+
   selectedFile: DirEntry | null;
-  selectedFileOrigin: "source" | "dest" | null; // <--- NEW: Tracks where the file is from
+  selectedFileOrigin: "source" | "dest" | null;
   checkedFiles: Set<string>;
 
   // CONFLICT STATE
@@ -28,11 +33,13 @@ interface AppState {
   setFileList: (files: DirEntry[]) => void;
   setDestFiles: (files: Set<string>) => void;
 
+  setManifestMap: (map: Map<string, ManifestEntry>) => void; // <--- NEW ACTION
+
   addVerifyingFile: (filename: string) => void;
   removeVerifyingFile: (filename: string) => void;
   addVerifiedFile: (filename: string) => void;
 
-  // UPDATED: Now accepts an optional origin ('source' is default for backward compatibility)
+  // Accepts an optional origin ('source' is default for backward compatibility)
   // FIX: Added | null to the origin type to prevent TS mismatch
   setSelectedFile: (
     file: DirEntry | null,
@@ -44,11 +51,11 @@ interface AppState {
   toggleChecked: (filename: string) => void;
   checkAllMissing: () => void;
   setAllChecked: (filenames: string[]) => void;
-  setCheckedFiles: (files: Set<string>) => void; // <--- 1. ADDED INTERFACE DEFINITION
+  setCheckedFiles: (files: Set<string>) => void;
   clearChecked: () => void;
   resetSource: () => void;
 
-  // --- NEW: UTILITY ACTIONS ---
+  // --- UTILITY ACTIONS ---
   swapPaths: () => void;
 
   // --- DRAWER ACTIONS ---
@@ -57,7 +64,7 @@ interface AppState {
   addCompletedBytes: (bytes: number) => void;
   setTransferStartTime: (time: number | null) => void;
 
-  // NEW: Reset Action for Zombie Drawer fix
+  // Reset Action for Zombie Drawer fix
   resetJobMetrics: () => void;
 }
 
@@ -68,8 +75,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   destFiles: new Set(),
   verifiedFiles: new Set(),
   verifyingFiles: new Set(),
+  manifestMap: new Map(), // <--- INITIALIZE
   selectedFile: null,
-  selectedFileOrigin: null, // <--- NEW
+  selectedFileOrigin: null,
   checkedFiles: new Set(),
   conflicts: [],
 
@@ -84,6 +92,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setDestPath: (path) => set({ destPath: path }),
   setFileList: (files) => set({ fileList: files }),
   setDestFiles: (files) => set({ destFiles: files }),
+  setManifestMap: (map) => set({ manifestMap: map }), // <--- IMPLEMENT
 
   addVerifyingFile: (filename) =>
     set((state) => {
@@ -106,7 +115,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       return { verifiedFiles: newSet };
     }),
 
-  // UPDATED: Sets origin. Defaults to "source" if not specified.
+  // Sets origin. Defaults to "source" if not specified.
   setSelectedFile: (file, origin = "source") =>
     set({ selectedFile: file, selectedFileOrigin: origin }),
 
@@ -132,7 +141,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setAllChecked: (filenames) => set({ checkedFiles: new Set(filenames) }),
 
-  setCheckedFiles: (files) => set({ checkedFiles: files }), // <--- 2. ADDED IMPLEMENTATION
+  setCheckedFiles: (files) => set({ checkedFiles: files }),
 
   clearChecked: () => set({ checkedFiles: new Set() }),
 
@@ -146,9 +155,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       destFiles: new Set(),
       verifiedFiles: new Set(),
       verifyingFiles: new Set(),
+      manifestMap: new Map(), // <--- CLEAR ON SWAP
       checkedFiles: new Set(),
       selectedFile: null,
-      selectedFileOrigin: null, // <--- RESET
+      selectedFileOrigin: null,
       conflicts: [],
       // Reset Drawer
       batchTotalBytes: 0,
@@ -170,10 +180,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       sourcePath: null,
       fileList: [],
       selectedFile: null,
-      selectedFileOrigin: null, // <--- RESET
+      selectedFileOrigin: null,
       verifiedFiles: new Set(),
       verifyingFiles: new Set(),
       checkedFiles: new Set(),
+      manifestMap: new Map(), // <--- CLEAR ON RESET
       conflicts: [],
       // Reset Drawer State too
       batchTotalBytes: 0,
@@ -182,7 +193,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       isDrawerOpen: false,
     }),
 
-  // NEW: Reset Action implementation
+  // Reset Action implementation
   resetJobMetrics: () =>
     set({
       batchTotalBytes: 0,
