@@ -49,6 +49,39 @@ struct FfprobeStream {
 
 // --- COMMANDS ---
 
+// --- NEW COMMAND: SHOW IN EXPLORER (Sprint 7 Fix) ---
+#[tauri::command]
+async fn show_in_folder(path: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .args(["/select,", &path]) // Comma is important for selection
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .args(["-R", &path]) // -R = Reveal
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        // Linux fallback: Open parent folder
+        let path_obj = std::path::Path::new(&path);
+        if let Some(parent) = path_obj.parent() {
+             std::process::Command::new("xdg-open")
+            .arg(parent)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+
 // --- NEW COMMAND: RECURSIVE FOLDER STATS (Sprint 5) ---
 #[tauri::command]
 async fn get_dir_stats(path: String) -> Result<DirStats, String> {
@@ -380,7 +413,8 @@ pub fn run() {
             get_video_metadata,
             clean_video_cache,
             delete_files,
-            get_dir_stats // <--- REGISTERED NEW COMMAND (Sprint 5)
+            get_dir_stats,
+            show_in_folder // <--- REGISTERED NEW COMMAND (Sprint 7 Fix)
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

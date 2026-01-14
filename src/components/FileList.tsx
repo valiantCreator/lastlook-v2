@@ -9,6 +9,8 @@ interface FileListProps {
   destFiles: Set<string>;
   onSelectSource: () => void;
   onClearSource: () => void;
+  // --- NEW ---
+  onContextMenu: (e: React.MouseEvent, path: string) => void;
 }
 
 export function FileList({
@@ -17,6 +19,7 @@ export function FileList({
   destFiles,
   onSelectSource,
   onClearSource,
+  onContextMenu, // <--- Destructure
 }: FileListProps) {
   const {
     selectedFile,
@@ -27,14 +30,13 @@ export function FileList({
     toggleChecked,
     checkAllMissing,
     destPath,
-    manifestMap, // <--- NEW: Access the Manifest Brain
-    openDeleteModal, // <--- NEW: Open the Red Zone
+    manifestMap,
+    openDeleteModal,
   } = useAppStore();
 
   const activeRef = useRef<HTMLDivElement>(null);
 
   // --- DELETE LOGIC ---
-  // Calculate how many selected files are actually safe to delete
   const verifiedSelection = Array.from(checkedFiles).filter((name) =>
     manifestMap.has(name)
   );
@@ -42,7 +44,6 @@ export function FileList({
 
   const handleFreeSpace = () => {
     if (!canDelete) return;
-    // Hand off to the safety modal
     openDeleteModal(verifiedSelection);
   };
   // --------------------
@@ -98,7 +99,7 @@ export function FileList({
             isSynced={destFiles.has(file.name)}
             isVerified={verifiedFiles.has(file.name)}
             isVerifying={verifyingFiles.has(file.name)}
-            // --- NEW PROP: CHECK MANIFEST ---
+            // --- PROP: CHECK MANIFEST ---
             isManifestVerified={manifestMap.has(file.name)}
             // --------------------------------
 
@@ -110,6 +111,14 @@ export function FileList({
               setSelectedFile(file, "source");
             }}
             onCheck={() => toggleChecked(file.name)}
+            // --- NEW: CONTEXT MENU ---
+            onContextMenu={(e: React.MouseEvent) => {
+              // Construct full path for the opener
+              const separator = sourcePath.endsWith("\\") ? "" : "\\";
+              const fullPath = `${sourcePath}${separator}${file.name}`;
+              onContextMenu(e, fullPath);
+            }}
+            // -------------------------
           />
         ))}
       </div>
@@ -132,7 +141,7 @@ export function FileList({
           Select All Missing
         </button>
 
-        {/* --- NEW: FREE UP SPACE BUTTON --- */}
+        {/* --- FREE UP SPACE BUTTON --- */}
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -151,7 +160,6 @@ export function FileList({
             ? `Free Up Space (${verifiedSelection.length})`
             : "Free Up Space"}
         </button>
-        {/* --------------------------------- */}
 
         <button
           onClick={(e) => {

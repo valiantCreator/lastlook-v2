@@ -1,5 +1,5 @@
 import "./App.css";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react"; // <--- ADDED useState
 import { useFileSystem } from "./hooks/useFileSystem";
 import { useAppStore } from "./store/appStore";
 import { FileList } from "./components/FileList";
@@ -8,10 +8,12 @@ import { Inspector } from "./components/Inspector";
 import { useTransfer } from "./hooks/useTransfer";
 import { ConflictModal } from "./components/ConflictModal";
 import { DeleteModal } from "./components/DeleteModal"; // <--- NEW IMPORT
+import { ContextMenu } from "./components/ContextMenu"; // <--- ADDED COMPONENT
 import { JobDrawer } from "./components/JobDrawer";
 import { listen } from "@tauri-apps/api/event"; // <--- RESTORED LISTENER
 import { stat } from "@tauri-apps/plugin-fs";
 import { dirname, basename } from "@tauri-apps/api/path"; // <--- SAFER PATH PARSING
+import { invoke } from "@tauri-apps/api/core"; // <--- ADDED INVOKE
 
 function App() {
   // 1. DATA (From Store)
@@ -57,6 +59,36 @@ function App() {
   // --- REFS FOR DROP ZONES (Kept for layout consistency) ---
   const sourcePanelRef = useRef<HTMLDivElement>(null);
   const destPanelRef = useRef<HTMLDivElement>(null);
+
+  // --- NEW: CONTEXT MENU STATE (Sprint 7) ---
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    path: string;
+  } | null>(null);
+
+  // Handler: Open Menu
+  const handleContextMenu = (e: React.MouseEvent, path: string) => {
+    e.preventDefault(); // Prevent browser menu
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      path,
+    });
+  };
+
+  // Handler: Reveal File (Uses Native Rust Command)
+  const handleReveal = async () => {
+    if (contextMenu) {
+      try {
+        await invoke("show_in_folder", { path: contextMenu.path });
+        setContextMenu(null);
+      } catch (err) {
+        console.error("Failed to reveal file:", err);
+      }
+    }
+  };
+  // ------------------------------------------
 
   // 3. AUTO-CLEAN CACHE ON STARTUP
   useEffect(() => {
@@ -152,6 +184,16 @@ function App() {
 
   return (
     <div className="h-screen w-screen bg-zinc-950 text-zinc-300 flex overflow-hidden font-sans select-none relative">
+      {/* --- NEW: CONTEXT MENU (Sprint 7) --- */}
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={() => setContextMenu(null)}
+          onReveal={handleReveal}
+        />
+      )}
+
       {/* --- CONFLICT MODAL --- */}
       {conflicts.length > 0 && (
         <ConflictModal
@@ -218,6 +260,8 @@ function App() {
             clearSource();
             resetSource();
           }}
+          // --- NEW: PASS CONTEXT HANDLER ---
+          onContextMenu={handleContextMenu}
         />
       </div>
 
