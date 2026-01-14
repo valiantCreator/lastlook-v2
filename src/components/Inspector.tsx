@@ -2,12 +2,13 @@ import { useEffect, useState } from "react";
 import { useAppStore } from "../store/appStore";
 import { formatSize, formatDate } from "../utils/formatters";
 import { invoke } from "@tauri-apps/api/core";
+import { stat } from "@tauri-apps/plugin-fs";
 import { useMedia } from "../hooks/useMedia";
 
 interface FileMetadata {
   size: number;
-  created?: number;
-  modified?: number;
+  created?: Date | null;
+  modified?: Date | null;
 }
 
 // --- NEW INTERFACE FOR VIDEO INFO ---
@@ -30,44 +31,67 @@ export function Inspector() {
   } = useAppStore();
 
   const [metadata, setMetadata] = useState<FileMetadata | null>(null);
-  const [videoMeta, setVideoMeta] = useState<VideoMetadata | null>(null); // <--- NEW STATE
+  const [videoMeta, setVideoMeta] = useState<VideoMetadata | null>(null);
 
   // Batch State
   const [batchSize, setBatchSize] = useState<number>(0);
   const [isBatchLoading, setIsBatchLoading] = useState(false);
 
-  // 1. Construct Full Path for Preview
+  // 1. Robust Path Construction
   const rootPath = selectedFileOrigin === "dest" ? destPath : sourcePath;
+
+  // Logic: Ensure we don't double-slash or miss a slash
+  const separator =
+    rootPath?.endsWith("\\") || rootPath?.endsWith("/") ? "" : "\\";
   const fullPath =
-    selectedFile && rootPath ? `${rootPath}\\${selectedFile.name}` : null;
+    selectedFile && rootPath
+      ? `${rootPath}${separator}${selectedFile.name}`
+      : null;
 
   // 2. Use the Media Hook
   const { thumbnailUrl, isLoading } = useMedia(fullPath);
 
-  // 3. Fetch Metadata (Single File)
+  // 3. Fetch Metadata (Stabilized)
   useEffect(() => {
-    if (!selectedFile || !rootPath) {
-      setMetadata(null);
-      return;
-    }
+    let active = true; // <--- TRAFFIC CONTROL
 
-    invoke("plugin:fs|stat", { path: fullPath })
-      .then((stat: any) => {
-        setMetadata({
-          size: stat.size,
-          created: stat.birthtime,
-          modified: stat.mtime,
-        });
+    // A. Immediate Reset (Prevents stale data showing)
+    setMetadata(null);
+
+    if (!selectedFile || !rootPath || !fullPath) return;
+
+    console.log("🔍 Inspecting:", fullPath); // Debug Log
+
+    // B. Fetch Data
+    stat(fullPath)
+      .then((info) => {
+        if (active) {
+          console.log("✅ Stat Success:", info);
+          setMetadata({
+            size: info.size,
+            created: info.birthtime,
+            modified: info.mtime,
+          });
+        }
       })
       .catch((err) => {
-        console.error("Failed to stat file:", err);
-        setMetadata(null);
+        if (active) {
+          console.warn("❌ Stat Failed:", err);
+          setMetadata(null);
+        }
       });
+
+    // C. Cleanup (Cancels the update if user clicks another file)
+    return () => {
+      active = false;
+    };
   }, [selectedFile, rootPath, fullPath]);
 
-  // 4. Fetch Video Metadata (New Phase 8 Logic)
+  // 4. Fetch Video Metadata
   useEffect(() => {
-    setVideoMeta(null); // Reset when file changes
+    let active = true;
+    setVideoMeta(null);
+
     if (!selectedFile || !rootPath || !fullPath) return;
 
     // Simple extension check to avoid running ffprobe on non-video files
@@ -75,41 +99,54 @@ export function Inspector() {
 
     if (isVideo) {
       invoke<VideoMetadata>("get_video_metadata", { path: fullPath })
-        .then(setVideoMeta)
+        .then((data) => {
+          if (active) setVideoMeta(data);
+        })
         .catch((e) => {
-          // It's okay if this fails (e.g. corrupt video or missing ffprobe), we just won't show the extra info
-          console.warn("Failed to get video meta:", e);
+          console.warn("Video Meta skipped:", e);
         });
     }
+
+    return () => {
+      active = false;
+    };
   }, [selectedFile, rootPath, fullPath]);
 
-  // 5. Batch Calculation (Always run if checkedFiles exist)
+  // 5. Batch Calculation
   useEffect(() => {
+    let active = true;
     if (checkedFiles.size > 0 && sourcePath) {
       setIsBatchLoading(true);
 
+      const sep = sourcePath.endsWith("\\") ? "" : "\\";
       const promises = Array.from(checkedFiles).map((filename) =>
-        invoke("plugin:fs|stat", { path: `${sourcePath}\\${filename}` })
-          .then((stat: any) => stat.size as number)
+        stat(`${sourcePath}${sep}${filename}`)
+          .then((info) => info.size)
           .catch(() => 0)
       );
 
       Promise.all(promises)
         .then((sizes) => {
-          const total = sizes.reduce((acc, curr) => acc + curr, 0);
-          setBatchSize(total);
+          if (active) {
+            const total = sizes.reduce((acc, curr) => acc + curr, 0);
+            setBatchSize(total);
+          }
         })
-        .finally(() => setIsBatchLoading(false));
+        .finally(() => {
+          if (active) setIsBatchLoading(false);
+        });
     } else {
       setBatchSize(0);
     }
+    return () => {
+      active = false;
+    };
   }, [checkedFiles, sourcePath]);
 
-  // --- SUB-COMPONENTS ---
-
+  // --- SUB-COMPONENTS (Unchanged) ---
   const BatchHeader = () => (
     <div
-      onClick={() => setSelectedFile(null)} // Click header to go back to full batch view
+      onClick={() => setSelectedFile(null)}
       className={`shrink-0 border-b border-zinc-800 transition-colors cursor-pointer group
             ${
               selectedFile
@@ -268,17 +305,13 @@ export function Inspector() {
             <div className="flex justify-between border-b border-zinc-800/50 pb-2">
               <span className="text-xs text-zinc-500">Created</span>
               <span className="text-xs font-mono text-zinc-400">
-                {metadata?.created
-                  ? formatDate(new Date(metadata.created))
-                  : "---"}
+                {metadata?.created ? formatDate(metadata.created) : "---"}
               </span>
             </div>
             <div className="flex justify-between border-b border-zinc-800/50 pb-2">
               <span className="text-xs text-zinc-500">Modified</span>
               <span className="text-xs font-mono text-zinc-400">
-                {metadata?.modified
-                  ? formatDate(new Date(metadata.modified))
-                  : "---"}
+                {metadata?.modified ? formatDate(metadata.modified) : "---"}
               </span>
             </div>
           </div>
