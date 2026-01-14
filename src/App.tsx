@@ -316,8 +316,11 @@ function App() {
                 </span>
               </div>
 
-              {/* THE NEW SYNCED LIST */}
-              <DestFileList files={destFiles} />
+              {/* --- NEW: PASS CONTEXT HANDLER --- */}
+              <DestFileList
+                files={destFiles}
+                onContextMenu={handleContextMenu}
+              />
             </div>
           )}
         </div>

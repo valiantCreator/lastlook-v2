@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useAppStore } from "../store/appStore";
 
 // --- NEW: INLINE SHIELD ICON (No dependencies required) ---
+// --- UPDATED: Now wrapped in logic inside the main return, so we keep this simple.
 function ShieldCheckIcon({ className }: { className?: string }) {
   return (
     <svg
@@ -22,11 +23,19 @@ function ShieldCheckIcon({ className }: { className?: string }) {
 
 interface DestFileListProps {
   files: Set<string>;
+  // --- NEW: CONTEXT MENU PROP ---
+  onContextMenu: (e: React.MouseEvent, path: string) => void;
 }
 
-export function DestFileList({ files }: DestFileListProps) {
-  const { selectedFile, setSelectedFile, sourcePath, fileList, manifestMap } =
-    useAppStore();
+export function DestFileList({ files, onContextMenu }: DestFileListProps) {
+  const {
+    selectedFile,
+    setSelectedFile,
+    sourcePath,
+    fileList,
+    manifestMap,
+    destPath,
+  } = useAppStore();
 
   const [showSyncedOnly, setShowSyncedOnly] = useState(false);
 
@@ -124,6 +133,15 @@ export function DestFileList({ files }: DestFileListProps) {
                   "dest"
                 );
               }}
+              // --- NEW: CONTEXT MENU HANDLER ---
+              onContextMenu={(e) => {
+                if (destPath) {
+                  const separator = destPath.endsWith("\\") ? "" : "\\";
+                  const fullPath = `${destPath}${separator}${filename}`;
+                  onContextMenu(e, fullPath);
+                }
+              }}
+              // ---------------------------------
               className={`
                   flex items-center gap-3 p-2 rounded cursor-pointer transition-all duration-200 border
                   ${
@@ -135,8 +153,21 @@ export function DestFileList({ files }: DestFileListProps) {
             >
               {/* SMART ICON LOGIC (Shield vs Dot) */}
               {isVerified ? (
-                // --- VERIFIED STATE (SHIELD) ---
-                <ShieldCheckIcon className="w-4 h-4 text-emerald-500 shrink-0" />
+                // --- VERIFIED STATE (SHIELD WITH TOOLTIP) ---
+                <div className="relative group/shield">
+                  <ShieldCheckIcon className="w-4 h-4 text-emerald-500 shrink-0" />
+
+                  {/* --- THE TOOLTIP (Sprint 7 FIX) --- */}
+                  {/* FIX: Left-Aligned (left-0) to prevent clipping */}
+                  <div className="absolute left-0 bottom-full mb-2 hidden group-hover/shield:block w-48 bg-zinc-950 text-[10px] text-center p-2 rounded border border-zinc-700 shadow-xl z-50 text-zinc-300 pointer-events-none">
+                    <span className="font-bold text-emerald-400 block mb-0.5">
+                      Verified Safe
+                    </span>
+                    xxHash-64 bit-for-bit match confirmed.
+                    {/* Arrow */}
+                    <div className="absolute left-2 top-full border-4 border-transparent border-t-zinc-700" />
+                  </div>
+                </div>
               ) : (
                 // --- UNVERIFIED STATE (DOT) ---
                 <div

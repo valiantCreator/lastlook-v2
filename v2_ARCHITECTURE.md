@@ -490,11 +490,11 @@ _Focus: Integrating "The Gold Mine" user feedback and hardening the app for prof
 - [x] **Recursive Folder Stats:** Implemented `get_dir_stats` (Rust/WalkDir) to count sub-files and folders recursively.
 - [x] **Truth on Disk:** Enforced real-time calculation (no caching) to guarantee data accuracy.
 
-#### 🔮 Sprint 3: The Paper Trail (Upcoming)
+#### ✅ Sprint 3: The Paper Trail (Completed)
 
 - [x] **Transfer Logs:** Auto-generate human-readable `.txt` receipts in the destination folder upon batch completion.
-- [ ] **Context Menus:** Right-click to "Show in Explorer/Finder".
-- [ ] **Verified Tooltips:** Explain "xxHash-64" to users.
+- [x] **Context Menus:** Right-click to "Reveal in Explorer/Finder" (Native OS integration).
+- [x] **Verified Tooltips:** Added hover states to explain "xxHash-64" integrity checks.
 
 ### 🔮 Phase 11: Power User Features
 

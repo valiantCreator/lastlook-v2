@@ -8,12 +8,12 @@ interface FileRowProps {
   isVerifying: boolean;
 
   // --- NEW PROP ---
-  isManifestVerified: boolean;
+  isManifestVerified: boolean; // <--- Controlled by parent
 
   hasDest: boolean;
   isSelected: boolean;
   isChecked: boolean;
-
+  // UPDATE: Now explicitly accepts the MouseEvent
   onSelect: (e: MouseEvent) => void;
   onCheck: () => void;
 
@@ -28,7 +28,7 @@ export const FileRow = forwardRef<HTMLDivElement, FileRowProps>(
       isSynced,
       isVerified,
       isVerifying,
-      isManifestVerified,
+      isManifestVerified, // <--- Destructure
       hasDest,
       isSelected,
       isChecked,
@@ -49,7 +49,7 @@ export const FileRow = forwardRef<HTMLDivElement, FileRowProps>(
         "bg-yellow-500/10 border-yellow-500/20 shadow-[inset_0_0_10px_rgba(234,179,8,0.05)]";
     }
 
-    // Consolidated Verified State
+    // Consolidated Verified State (Session OR Manifest)
     const showVerifiedState = isVerified || isManifestVerified;
 
     return (
@@ -105,7 +105,7 @@ export const FileRow = forwardRef<HTMLDivElement, FileRowProps>(
 
         {/* STATUS ICON (DOT OR SHIELD) */}
         {showVerifiedState ? (
-          // --- VERIFIED STATE WITH TOOLTIP ---
+          // --- VERIFIED STATE (SHIELD WITH TOOLTIP) ---
           <div className="relative group/shield">
             <svg
               className="w-3 h-3 text-emerald-500 shrink-0"
@@ -120,14 +120,15 @@ export const FileRow = forwardRef<HTMLDivElement, FileRowProps>(
               />
             </svg>
 
-            {/* --- THE TOOLTIP (Sprint 7) --- */}
-            <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover/shield:block w-48 bg-zinc-950 text-[10px] text-center p-2 rounded border border-zinc-700 shadow-xl z-50 text-zinc-300 pointer-events-none">
+            {/* --- THE TOOLTIP (Sprint 7 FIX) --- */}
+            {/* FIX: Left-Aligned (left-0) to prevent clipping */}
+            <div className="absolute left-0 bottom-full mb-2 hidden group-hover/shield:block w-48 bg-zinc-950 text-[10px] text-center p-2 rounded border border-zinc-700 shadow-xl z-50 text-zinc-300 pointer-events-none">
               <span className="font-bold text-emerald-400 block mb-0.5">
                 Verified Safe
               </span>
               xxHash-64 bit-for-bit match confirmed.
               {/* Arrow */}
-              <div className="absolute left-1/2 -translate-x-1/2 top-full border-4 border-transparent border-t-zinc-700" />
+              <div className="absolute left-2 top-full border-4 border-transparent border-t-zinc-700" />
             </div>
           </div>
         ) : (
@@ -142,8 +143,8 @@ export const FileRow = forwardRef<HTMLDivElement, FileRowProps>(
                   : isSynced
                   ? "bg-emerald-500 shadow-emerald-500/50"
                   : hasDest
-                  ? "bg-red-500/50 shadow-red-900/20"
-                  : "bg-zinc-600 shadow-zinc-900/50"
+                  ? "bg-red-500/50 shadow-red-900/20" // Show Red if missing from Dest
+                  : "bg-zinc-600 shadow-zinc-900/50" // Show Grey if no Dest
               }
               ${isSelected ? "scale-125" : ""} 
             `}
@@ -186,7 +187,7 @@ export const FileRow = forwardRef<HTMLDivElement, FileRowProps>(
               ? "Folder"
               : isVerifying
               ? "Verifying Integrity..."
-              : showVerifiedState
+              : showVerifiedState // <--- Updated Text Logic
               ? "Verified Safe"
               : isSynced
               ? "Synced (Unverified)"
