@@ -24,6 +24,14 @@ struct VideoMetadata {
     fps: String,
 }
 
+// --- NEW: DIR STATS STRUCT (Sprint 5) ---
+#[derive(serde::Serialize)]
+struct DirStats {
+    files: u64,
+    folders: u64,
+    total_size: u64,
+}
+
 // Internal structs for parsing FFprobe JSON
 #[derive(serde::Deserialize)]
 struct FfprobeOutput {
@@ -40,6 +48,31 @@ struct FfprobeStream {
 }
 
 // --- COMMANDS ---
+
+// --- NEW COMMAND: RECURSIVE FOLDER STATS (Sprint 5) ---
+#[tauri::command]
+async fn get_dir_stats(path: String) -> Result<DirStats, String> {
+    // Use spawn_blocking to prevent freezing the main thread during heavy I/O
+    let stats = tauri::async_runtime::spawn_blocking(move || {
+        let mut file_count = 0;
+        let mut folder_count = 0;
+        let mut size = 0;
+
+        // walkdir allows us to efficiently traverse nested directories
+        // We look for files and folders, skipping errors (permissions) silently
+        for entry in walkdir::WalkDir::new(&path).min_depth(1).into_iter().filter_map(|e| e.ok()) {
+            if entry.file_type().is_file() {
+                file_count += 1;
+                size += entry.metadata().map(|m| m.len()).unwrap_or(0);
+            } else if entry.file_type().is_dir() {
+                folder_count += 1;
+            }
+        }
+        DirStats { files: file_count, folders: folder_count, total_size: size }
+    }).await.map_err(|e| e.to_string())?;
+
+    Ok(stats)
+}
 
 // --- NEW COMMAND: CLEANUP ---
 #[tauri::command]
@@ -346,7 +379,8 @@ pub fn run() {
             generate_thumbnail,
             get_video_metadata,
             clean_video_cache,
-            delete_files // <--- REGISTERED NEW COMMAND (Sprint 4)
+            delete_files,
+            get_dir_stats // <--- REGISTERED NEW COMMAND (Sprint 5)
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -473,3 +473,30 @@ _Goal: Ensure the app feels snappy and bug-free._
 - [x] **Snappy Transitions:** Reduced post-transfer success delay to 1s.
 - [x] **Type Safety:** Resolved TypeScript definitions for file selection origins.
 - [x] **Auto-Cleanup:** Implemented "Nuke on Launch" strategy to clear `%TEMP%/lastlook_cache` on startup.
+
+### ✅ Phase 10: "Safety, Speed & Smarts" (Current Status)
+
+_Focus: Integrating "The Gold Mine" user feedback and hardening the app for professional DIT use._
+
+#### ✅ Sprint 1: Integrity & Critical Logic (Completed)
+
+- [x] **Nuke Partial Files:** Backend now destructively deletes partial files if a transfer is cancelled (`lib.rs`).
+- [x] **Smart Resume:** `useTransfer.ts` performs a pre-flight check (Size + Date) to skip identical files ("Difference Transfer").
+- [x] **Intelligent Drag & Drop:** Dropping a file now auto-mounts the parent folder and selects the file.
+
+#### 🚧 Sprint 2: The DIT Inspector (Active)
+
+- [x] **Inspector Repair:** Fixed race conditions and `stat` calls to ensure file details always load.
+- [ ] **Recursive Folder Stats:** (Next) Implement `get_dir_stats` in Rust to count sub-files/folders for directory selection.
+
+#### 🔮 Sprint 3: The Paper Trail (Upcoming)
+
+- [ ] **Transfer Logs:** Generate `.txt` manifests in the destination folder.
+- [ ] **Context Menus:** Right-click to "Show in Explorer/Finder".
+- [ ] **Verified Tooltips:** Explain "xxHash-64" to users.
+
+### 🔮 Phase 11: Power User Features
+
+- [ ] **Shift+Select:** Range selection for the file list.
+- [ ] **"Ask Me For Each":** Granular conflict resolution mode.
+- [ ] **Settings Modal:** Configuration for themes and verification preferences.

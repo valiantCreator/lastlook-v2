@@ -20,6 +20,13 @@ interface VideoMetadata {
   fps: string;
 }
 
+// --- NEW INTERFACE FOR DIRECTORY STATS (Sprint 5) ---
+interface DirStats {
+  files: number;
+  folders: number;
+  total_size: number;
+}
+
 export function Inspector() {
   const {
     selectedFile,
@@ -32,6 +39,8 @@ export function Inspector() {
 
   const [metadata, setMetadata] = useState<FileMetadata | null>(null);
   const [videoMeta, setVideoMeta] = useState<VideoMetadata | null>(null);
+  const [dirStats, setDirStats] = useState<DirStats | null>(null); // <--- NEW STATE
+  const [isDirCalculating, setIsDirCalculating] = useState(false); // <--- NEW LOADING STATE
 
   // Batch State
   const [batchSize, setBatchSize] = useState<number>(0);
@@ -111,6 +120,36 @@ export function Inspector() {
       active = false;
     };
   }, [selectedFile, rootPath, fullPath]);
+
+  // --- NEW: FETCH RECURSIVE DIRECTORY STATS (Sprint 5) ---
+  useEffect(() => {
+    let active = true;
+    setDirStats(null);
+    setIsDirCalculating(false);
+
+    if (!selectedFile || !fullPath) return;
+
+    // Only run this if the selected item is actually a directory
+    if (selectedFile.isDirectory) {
+      setIsDirCalculating(true);
+
+      invoke<DirStats>("get_dir_stats", { path: fullPath })
+        .then((stats) => {
+          if (active) {
+            setDirStats(stats);
+            setIsDirCalculating(false);
+          }
+        })
+        .catch((err) => {
+          console.error("Dir Stats Failed:", err);
+          if (active) setIsDirCalculating(false);
+        });
+    }
+
+    return () => {
+      active = false;
+    };
+  }, [selectedFile, fullPath]);
 
   // 5. Batch Calculation
   useEffect(() => {
@@ -219,6 +258,15 @@ export function Inspector() {
             alt="Preview"
             className="w-full h-full object-contain"
           />
+        ) : // FOLDER ICON or FILE ICON
+        selectedFile?.isDirectory ? (
+          <svg
+            className="w-20 h-20 text-blue-500/50"
+            fill="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" />
+          </svg>
         ) : (
           <svg
             className="w-20 h-20 text-zinc-800"
@@ -256,25 +304,70 @@ export function Inspector() {
 
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
-            <div className="p-3 bg-zinc-900/50 rounded border border-zinc-800/50">
-              <span className="text-[10px] uppercase text-zinc-500 font-bold block mb-1">
-                File Size
-              </span>
-              <span className="text-sm font-mono text-zinc-300">
-                {metadata ? formatSize(metadata.size) : "---"}
-              </span>
-            </div>
-            <div className="p-3 bg-zinc-900/50 rounded border border-zinc-800/50">
-              <span className="text-[10px] uppercase text-zinc-500 font-bold block mb-1">
-                Type
-              </span>
-              <span className="text-sm font-mono text-zinc-300">
-                {selectedFile!.isFile ? "File" : "Folder"}
-              </span>
-            </div>
+            {/* --- CONDITIONAL: SHOW DIR STATS IF FOLDER --- */}
+            {selectedFile?.isDirectory ? (
+              <>
+                <div className="p-3 bg-zinc-900/50 rounded border border-zinc-800/50">
+                  <span className="text-[10px] uppercase text-zinc-500 font-bold block mb-1">
+                    Total Size
+                  </span>
+                  <span
+                    className={`text-sm font-mono ${
+                      isDirCalculating
+                        ? "text-yellow-500 animate-pulse"
+                        : "text-zinc-300"
+                    }`}
+                  >
+                    {isDirCalculating
+                      ? "Calculating..."
+                      : dirStats
+                      ? formatSize(dirStats.total_size)
+                      : "---"}
+                  </span>
+                </div>
+                <div className="p-3 bg-zinc-900/50 rounded border border-zinc-800/50">
+                  <span className="text-[10px] uppercase text-zinc-500 font-bold block mb-1">
+                    Contents
+                  </span>
+                  <span
+                    className={`text-sm font-mono ${
+                      isDirCalculating
+                        ? "text-yellow-500 animate-pulse"
+                        : "text-zinc-300"
+                    }`}
+                  >
+                    {isDirCalculating
+                      ? "Scanning..."
+                      : dirStats
+                      ? `${dirStats.files} Files, ${dirStats.folders} Folders`
+                      : "Empty"}
+                  </span>
+                </div>
+              </>
+            ) : (
+              /* --- STANDARD FILE STATS --- */
+              <>
+                <div className="p-3 bg-zinc-900/50 rounded border border-zinc-800/50">
+                  <span className="text-[10px] uppercase text-zinc-500 font-bold block mb-1">
+                    File Size
+                  </span>
+                  <span className="text-sm font-mono text-zinc-300">
+                    {metadata ? formatSize(metadata.size) : "---"}
+                  </span>
+                </div>
+                <div className="p-3 bg-zinc-900/50 rounded border border-zinc-800/50">
+                  <span className="text-[10px] uppercase text-zinc-500 font-bold block mb-1">
+                    Type
+                  </span>
+                  <span className="text-sm font-mono text-zinc-300">
+                    {selectedFile!.isFile ? "File" : "Folder"}
+                  </span>
+                </div>
+              </>
+            )}
           </div>
 
-          {/* --- NEW: MEDIA METADATA BLOCK --- */}
+          {/* --- MEDIA METADATA BLOCK --- */}
           {videoMeta && (
             <div className="grid grid-cols-2 gap-4 pt-2 border-t border-zinc-800/50">
               <div className="p-3 bg-zinc-900/50 rounded border border-zinc-800/50">
