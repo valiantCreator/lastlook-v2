@@ -484,14 +484,15 @@ _Focus: Integrating "The Gold Mine" user feedback and hardening the app for prof
 - [x] **Smart Resume:** `useTransfer.ts` performs a pre-flight check (Size + Date) to skip identical files ("Difference Transfer").
 - [x] **Intelligent Drag & Drop:** Dropping a file now auto-mounts the parent folder and selects the file.
 
-#### 🚧 Sprint 2: The DIT Inspector (Active)
+#### ✅ Sprint 2: The DIT Inspector (Completed)
 
 - [x] **Inspector Repair:** Fixed race conditions and `stat` calls to ensure file details always load.
-- [ ] **Recursive Folder Stats:** (Next) Implement `get_dir_stats` in Rust to count sub-files/folders for directory selection.
+- [x] **Recursive Folder Stats:** Implemented `get_dir_stats` (Rust/WalkDir) to count sub-files and folders recursively.
+- [x] **Truth on Disk:** Enforced real-time calculation (no caching) to guarantee data accuracy.
 
 #### 🔮 Sprint 3: The Paper Trail (Upcoming)
 
-- [ ] **Transfer Logs:** Generate `.txt` manifests in the destination folder.
+- [x] **Transfer Logs:** Auto-generate human-readable `.txt` receipts in the destination folder upon batch completion.
 - [ ] **Context Menus:** Right-click to "Show in Explorer/Finder".
 - [ ] **Verified Tooltips:** Explain "xxHash-64" to users.
 

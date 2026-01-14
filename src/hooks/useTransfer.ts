@@ -1,12 +1,13 @@
 import { useState, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { stat } from "@tauri-apps/plugin-fs";
+import { stat, writeTextFile } from "@tauri-apps/plugin-fs"; // <--- ADDED writeTextFile
 import { useAppStore } from "../store/appStore";
 import { type, hostname } from "@tauri-apps/plugin-os";
 import { getVersion } from "@tauri-apps/api/app";
 import { updateManifest } from "../utils/manifest";
 import { ManifestEntry } from "../types/manifest"; // <--- Ensure this is imported if needed, though we construct it inline below
+import { generateLogContent } from "../utils/logGenerator"; // <--- ADDED LOG GENERATOR
 
 interface ProgressEvent {
   filename: string;
@@ -104,7 +105,11 @@ export function useTransfer() {
     abortRef.current = false;
 
     // --- NEW: INITIALIZE BATCH STATS ---
-    setTransferStartTime(Date.now());
+    const startTime = Date.now(); // <--- CAPTURE START TIME FOR LOGS
+    setTransferStartTime(startTime);
+
+    // --- NEW: SESSION ACCUMULATOR FOR LOGS (Sprint 6) ---
+    const sessionManifest: ManifestEntry[] = [];
 
     // --- NEW: PREPARE MANIFEST METADATA (Session Context) ---
     const sessionId = crypto.randomUUID();
@@ -312,6 +317,10 @@ export function useTransfer() {
           upsertManifestEntry(manifestEntry); // <--- Updates UI Shield instantly
           // --------------------------------------
 
+          // --- ACCUMULATE FOR LOGS (Sprint 6) ---
+          sessionManifest.push(manifestEntry);
+          // --------------------------------------
+
           // --- FIX: SNAP UI TO DONE IMMEDIATELY ---
           // This forces the bar to 100% green the moment Rust returns success
           setProgress(100);
@@ -345,6 +354,42 @@ export function useTransfer() {
       unlistenProgress();
       unlistenVerifying();
       setIsTransferring(false);
+
+      // --- GENERATE TRANSFER LOG (Sprint 6) ---
+      if (sessionManifest.length > 0 && destPath) {
+        try {
+          const logContent = generateLogContent(
+            {
+              machineName,
+              os: osType,
+              appVersion: appVer,
+              sessionId,
+              destinationPath: destPath, // <--- ADDED: PASS DEST PATH TO LOG
+              startTime,
+              endTime: Date.now(),
+            },
+            sessionManifest
+          );
+
+          // Construct Filename: LastLook_Log_YYYY-MM-DD_HH-mm-ss.txt
+          const now = new Date();
+          const timestamp = now
+            .toISOString()
+            .replace(/T/, "_")
+            .replace(/\..+/, "")
+            .replace(/:/g, "-");
+          const logName = `LastLook_Log_${timestamp}.txt`;
+
+          const destSep = destPath.endsWith("\\") ? "" : "\\";
+          const logPath = `${destPath}${destSep}${logName}`;
+
+          await writeTextFile(logPath, logContent);
+          console.log("📝 Transfer Log Generated:", logPath);
+        } catch (logErr) {
+          console.error("Failed to write transfer log:", logErr);
+        }
+      }
+      // ----------------------------------------
 
       if (!abortRef.current) {
         setProgress(100);
