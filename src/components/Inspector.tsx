@@ -29,22 +29,35 @@ interface DirStats {
 
 export function Inspector() {
   const {
-    selectedFile,
+    // --- CHANGED: CONSUME NEW MULTI-SELECT STATE (Sprint 8) ---
+    selectedFiles,
     selectedFileOrigin,
+    // ----------------------------------------------------------
     sourcePath,
     destPath,
     checkedFiles,
-    setSelectedFile,
+    clearSelection, // Replaces setSelectedFile(null)
+    checkSelectedFiles, // The "Bridge" Action
   } = useAppStore();
 
   const [metadata, setMetadata] = useState<FileMetadata | null>(null);
   const [videoMeta, setVideoMeta] = useState<VideoMetadata | null>(null);
-  const [dirStats, setDirStats] = useState<DirStats | null>(null); // <--- NEW STATE
-  const [isDirCalculating, setIsDirCalculating] = useState(false); // <--- NEW LOADING STATE
+  const [dirStats, setDirStats] = useState<DirStats | null>(null);
+  const [isDirCalculating, setIsDirCalculating] = useState(false);
 
   // Batch State
   const [batchSize, setBatchSize] = useState<number>(0);
   const [isBatchLoading, setIsBatchLoading] = useState(false);
+
+  // --- NEW: SELECTION BATCH STATE ---
+  const [selectionSize, setSelectionSize] = useState<number>(0);
+  const [isSelectionLoading, setIsSelectionLoading] = useState(false);
+
+  // DERIVED STATE: Determine what to show
+  // If exactly 1 file selected, show details. If >1, show batch info.
+  const activeFile =
+    selectedFiles.size === 1 ? selectedFiles.values().next().value : null;
+  const isMultiSelect = selectedFiles.size > 1;
 
   // 1. Robust Path Construction
   const rootPath = selectedFileOrigin === "dest" ? destPath : sourcePath;
@@ -53,9 +66,7 @@ export function Inspector() {
   const separator =
     rootPath?.endsWith("\\") || rootPath?.endsWith("/") ? "" : "\\";
   const fullPath =
-    selectedFile && rootPath
-      ? `${rootPath}${separator}${selectedFile.name}`
-      : null;
+    activeFile && rootPath ? `${rootPath}${separator}${activeFile.name}` : null;
 
   // 2. Use the Media Hook
   const { thumbnailUrl, isLoading } = useMedia(fullPath);
@@ -67,7 +78,7 @@ export function Inspector() {
     // A. Immediate Reset (Prevents stale data showing)
     setMetadata(null);
 
-    if (!selectedFile || !rootPath || !fullPath) return;
+    if (!activeFile || !rootPath || !fullPath) return;
 
     console.log("🔍 Inspecting:", fullPath); // Debug Log
 
@@ -94,17 +105,17 @@ export function Inspector() {
     return () => {
       active = false;
     };
-  }, [selectedFile, rootPath, fullPath]);
+  }, [activeFile, rootPath, fullPath]);
 
   // 4. Fetch Video Metadata
   useEffect(() => {
     let active = true;
     setVideoMeta(null);
 
-    if (!selectedFile || !rootPath || !fullPath) return;
+    if (!activeFile || !rootPath || !fullPath) return;
 
     // Simple extension check to avoid running ffprobe on non-video files
-    const isVideo = /\.(mp4|mov|mkv|avi|webm)$/i.test(selectedFile.name);
+    const isVideo = /\.(mp4|mov|mkv|avi|webm)$/i.test(activeFile.name);
 
     if (isVideo) {
       invoke<VideoMetadata>("get_video_metadata", { path: fullPath })
@@ -119,7 +130,7 @@ export function Inspector() {
     return () => {
       active = false;
     };
-  }, [selectedFile, rootPath, fullPath]);
+  }, [activeFile, rootPath, fullPath]);
 
   // --- NEW: FETCH RECURSIVE DIRECTORY STATS (Sprint 5) ---
   useEffect(() => {
@@ -127,10 +138,10 @@ export function Inspector() {
     setDirStats(null);
     setIsDirCalculating(false);
 
-    if (!selectedFile || !fullPath) return;
+    if (!activeFile || !fullPath) return;
 
     // Only run this if the selected item is actually a directory
-    if (selectedFile.isDirectory) {
+    if (activeFile.isDirectory) {
       setIsDirCalculating(true);
 
       invoke<DirStats>("get_dir_stats", { path: fullPath })
@@ -149,9 +160,9 @@ export function Inspector() {
     return () => {
       active = false;
     };
-  }, [selectedFile, fullPath]);
+  }, [activeFile, fullPath]);
 
-  // 5. Batch Calculation
+  // 5. Checkbox Batch Calculation
   useEffect(() => {
     let active = true;
     if (checkedFiles.size > 0 && sourcePath) {
@@ -182,30 +193,60 @@ export function Inspector() {
     };
   }, [checkedFiles, sourcePath]);
 
-  // --- SUB-COMPONENTS (Unchanged) ---
+  // --- NEW: SELECTION BATCH CALCULATION (Sprint 8) ---
+  useEffect(() => {
+    let active = true;
+    if (isMultiSelect && rootPath) {
+      setIsSelectionLoading(true);
+
+      const sep = rootPath.endsWith("\\") ? "" : "\\";
+      const promises = Array.from(selectedFiles.keys()).map((filename) =>
+        stat(`${rootPath}${sep}${filename}`)
+          .then((info) => info.size)
+          .catch(() => 0)
+      );
+
+      Promise.all(promises)
+        .then((sizes) => {
+          if (active) {
+            const total = sizes.reduce((acc, curr) => acc + curr, 0);
+            setSelectionSize(total);
+          }
+        })
+        .finally(() => {
+          if (active) setIsSelectionLoading(false);
+        });
+    }
+    return () => {
+      active = false;
+    };
+  }, [selectedFiles, rootPath, isMultiSelect]);
+
+  // --- SUB-COMPONENTS ---
   const BatchHeader = () => (
     <div
-      onClick={() => setSelectedFile(null)}
+      onClick={() => clearSelection()}
       className={`shrink-0 border-b border-zinc-800 transition-colors cursor-pointer group
             ${
-              selectedFile
+              // Changed condition: Highlight if we have active selection OR active checks
+              selectedFiles.size > 0
                 ? "bg-zinc-900/80 hover:bg-zinc-800 py-3 px-4"
                 : "h-64 bg-zinc-950 flex flex-col items-center justify-center gap-3"
             }
         `}
     >
-      {selectedFile ? (
+      {selectedFiles.size > 0 ? (
         // COMPACT HEADER (Shown when a file is also selected)
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]" />
             <span className="text-xs font-bold text-blue-400 uppercase tracking-wide">
-              Batch Active
+              {isMultiSelect ? "Multi-Select" : "Details"}
             </span>
           </div>
           <div className="text-right">
             <p className="text-xs text-zinc-300 font-mono">
-              {checkedFiles.size} Files
+              {checkedFiles.size} Checked
               <span className="text-zinc-600 mx-1">|</span>
               {isBatchLoading ? "..." : formatSize(batchSize)}
             </p>
@@ -243,6 +284,33 @@ export function Inspector() {
     </div>
   );
 
+  // --- NEW: MULTI-SELECT PREVIEW (Sprint 8) ---
+  const MultiSelectPreview = () => (
+    <div className="flex-1 flex flex-col items-center justify-center text-center p-6 space-y-4">
+      <div className="w-20 h-20 bg-blue-500/10 rounded-full flex items-center justify-center border border-blue-500/20">
+        <span className="text-2xl font-bold text-blue-400">
+          {selectedFiles.size}
+        </span>
+      </div>
+      <div>
+        <h3 className="text-lg font-bold text-zinc-100">Items Highlighted</h3>
+        <p className="text-sm text-zinc-500 font-mono mt-1">
+          Total: {isSelectionLoading ? "..." : formatSize(selectionSize)}
+        </p>
+      </div>
+
+      {/* BRIDGE BUTTON (Only show if Source) */}
+      {selectedFileOrigin === "source" && (
+        <button
+          onClick={checkSelectedFiles}
+          className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded shadow-lg active:scale-95 transition-all text-xs font-bold uppercase tracking-wide"
+        >
+          Check These Files
+        </button>
+      )}
+    </div>
+  );
+
   const FilePreview = () => (
     <>
       {/* --- PREVIEW AREA --- */}
@@ -259,7 +327,7 @@ export function Inspector() {
             className="w-full h-full object-contain"
           />
         ) : // FOLDER ICON or FILE ICON
-        selectedFile?.isDirectory ? (
+        activeFile?.isDirectory ? (
           <svg
             className="w-20 h-20 text-blue-500/50"
             fill="currentColor"
@@ -293,19 +361,19 @@ export function Inspector() {
       <div className="p-6 space-y-6 overflow-y-auto bg-zinc-900/30 flex-1">
         <div>
           <h2 className="text-lg font-bold text-zinc-100 break-all leading-tight">
-            {selectedFile!.name}
+            {activeFile!.name}
           </h2>
           <p className="text-xs text-zinc-500 font-mono mt-1 uppercase tracking-wider">
-            {selectedFile!.isDirectory
+            {activeFile!.isDirectory
               ? "Directory"
-              : selectedFile!.name.split(".").pop()}
+              : activeFile!.name.split(".").pop()}
           </p>
         </div>
 
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             {/* --- CONDITIONAL: SHOW DIR STATS IF FOLDER --- */}
-            {selectedFile?.isDirectory ? (
+            {activeFile?.isDirectory ? (
               <>
                 <div className="p-3 bg-zinc-900/50 rounded border border-zinc-800/50">
                   <span className="text-[10px] uppercase text-zinc-500 font-bold block mb-1">
@@ -360,7 +428,7 @@ export function Inspector() {
                     Type
                   </span>
                   <span className="text-sm font-mono text-zinc-300">
-                    {selectedFile!.isFile ? "File" : "Folder"}
+                    {activeFile!.isFile ? "File" : "Folder"}
                   </span>
                 </div>
               </>
@@ -419,11 +487,15 @@ export function Inspector() {
       {/* 1. If we have a batch, ALWAYS show the header (Compact or Full) */}
       {checkedFiles.size > 0 && <BatchHeader />}
 
-      {/* 2. If we have a selection, Show Preview (stacked under header) */}
-      {selectedFile && <FilePreview />}
+      {/* 2. Show Preview (Single) OR Multi-Select (Group) */}
+      {activeFile ? (
+        <FilePreview />
+      ) : isMultiSelect ? (
+        <MultiSelectPreview />
+      ) : null}
 
-      {/* 3. Empty State (No Batch, No Selection) */}
-      {!selectedFile && checkedFiles.size === 0 && (
+      {/* 3. Empty State */}
+      {!activeFile && !isMultiSelect && checkedFiles.size === 0 && (
         <div className="flex-1 flex flex-col items-center justify-center text-zinc-600 p-8 text-center">
           <div className="w-16 h-16 mb-4 rounded-full bg-zinc-900/50 border border-zinc-800 flex items-center justify-center">
             <svg

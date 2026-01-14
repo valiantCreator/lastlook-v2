@@ -22,21 +22,25 @@ export function FileList({
   onContextMenu, // <--- Destructure
 }: FileListProps) {
   const {
-    selectedFile,
-    setSelectedFile,
+    // --- CHANGED: USE NEW MULTI-SELECT STATE ---
+    selectedFiles,
+    selectFile,
+    clearSelection,
+    // -------------------------------------------
     verifiedFiles,
     verifyingFiles,
     checkedFiles,
     toggleChecked,
     checkAllMissing,
     destPath,
-    manifestMap,
-    openDeleteModal,
+    manifestMap, // <--- NEW: Access the Manifest Brain
+    openDeleteModal, // <--- NEW: Open the Red Zone
   } = useAppStore();
 
   const activeRef = useRef<HTMLDivElement>(null);
 
   // --- DELETE LOGIC ---
+  // Calculate how many selected files are actually safe to delete
   const verifiedSelection = Array.from(checkedFiles).filter((name) =>
     manifestMap.has(name)
   );
@@ -44,6 +48,7 @@ export function FileList({
 
   const handleFreeSpace = () => {
     if (!canDelete) return;
+    // Hand off to the safety modal
     openDeleteModal(verifiedSelection);
   };
   // --------------------
@@ -55,7 +60,7 @@ export function FileList({
         block: "nearest",
       });
     }
-  }, [selectedFile]);
+  }, [selectedFiles]); // Trigger scroll when selection map changes
 
   if (!sourcePath) {
     return (
@@ -88,27 +93,42 @@ export function FileList({
   return (
     <div
       className="flex-1 flex flex-col h-full min-h-0"
-      onClick={() => setSelectedFile(null)}
+      onClick={() => clearSelection()} // Clear selection on background click
     >
       <div className="flex-1 overflow-y-auto p-2 space-y-1 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent">
-        {files.map((file) => (
+        {files.map((file, index) => (
           <FileRow
             key={file.name}
-            ref={selectedFile?.name === file.name ? activeRef : null}
+            // Logic: If this file is the *last* one clicked (most recent in map?), scroll to it.
+            // For now, simpler to scroll if it's the *only* one selected to avoid jumping.
+            ref={
+              selectedFiles.size === 1 && selectedFiles.has(file.name)
+                ? activeRef
+                : null
+            }
             file={file}
             isSynced={destFiles.has(file.name)}
             isVerified={verifiedFiles.has(file.name)}
             isVerifying={verifyingFiles.has(file.name)}
-            // --- PROP: CHECK MANIFEST ---
+            // --- NEW PROP: CHECK MANIFEST ---
             isManifestVerified={manifestMap.has(file.name)}
             // --------------------------------
 
             hasDest={!!destPath}
-            isSelected={selectedFile?.name === file.name}
+            // --- CHANGED: Check inclusion in Set ---
+            isSelected={selectedFiles.has(file.name)}
+            // ---------------------------------------
             isChecked={checkedFiles.has(file.name)}
             onSelect={(e: React.MouseEvent) => {
               e.stopPropagation();
-              setSelectedFile(file, "source");
+              // --- NEW: MODIFIER LOGIC ---
+              const modifier = e.shiftKey
+                ? "shift"
+                : e.ctrlKey || e.metaKey
+                ? "ctrl"
+                : "none";
+              selectFile(file, "source", modifier, index);
+              // ---------------------------
             }}
             onCheck={() => toggleChecked(file.name)}
             // --- NEW: CONTEXT MENU ---
@@ -141,7 +161,7 @@ export function FileList({
           Select All Missing
         </button>
 
-        {/* --- FREE UP SPACE BUTTON --- */}
+        {/* --- NEW: FREE UP SPACE BUTTON --- */}
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -160,6 +180,7 @@ export function FileList({
             ? `Free Up Space (${verifiedSelection.length})`
             : "Free Up Space"}
         </button>
+        {/* --------------------------------- */}
 
         <button
           onClick={(e) => {

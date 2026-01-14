@@ -29,8 +29,11 @@ interface DestFileListProps {
 
 export function DestFileList({ files, onContextMenu }: DestFileListProps) {
   const {
-    selectedFile,
-    setSelectedFile,
+    // --- CHANGED: USE NEW MULTI-SELECT STATE ---
+    selectedFiles,
+    selectFile,
+    clearSelection,
+    // -------------------------------------------
     sourcePath,
     fileList,
     manifestMap,
@@ -60,7 +63,7 @@ export function DestFileList({ files, onContextMenu }: DestFileListProps) {
         block: "nearest",
       });
     }
-  }, [selectedFile]);
+  }, [selectedFiles]);
 
   if (files.size === 0) {
     return (
@@ -74,7 +77,7 @@ export function DestFileList({ files, onContextMenu }: DestFileListProps) {
     <div
       className="flex-1 flex flex-col min-h-0"
       // CHANGE: Clicking the empty background deselects the file
-      onClick={() => setSelectedFile(null)}
+      onClick={() => clearSelection()}
     >
       {/* FILTER TOOLBAR (Sticky Top) */}
       <div
@@ -107,8 +110,8 @@ export function DestFileList({ files, onContextMenu }: DestFileListProps) {
 
       {/* LIST CONTENT */}
       <div className="flex-1 overflow-y-auto p-2 space-y-1 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent">
-        {displayFiles.map((filename) => {
-          const isSelected = selectedFile?.name === filename;
+        {displayFiles.map((filename, index) => {
+          const isSelected = selectedFiles.has(filename);
           const isSynced = sourceFileNames.has(filename);
 
           // --- UPDATED LOGIC: Shield ONLY if in Manifest AND in Source ---
@@ -118,19 +121,28 @@ export function DestFileList({ files, onContextMenu }: DestFileListProps) {
           return (
             <div
               key={filename}
-              ref={isSelected ? activeRef : null}
+              // Only auto-scroll to this if it's the single selection to avoid jumping
+              ref={isSelected && selectedFiles.size === 1 ? activeRef : null}
               onClick={(e) => {
                 // CHANGE: Stop propagation so row click doesn't trigger background deselect
                 e.stopPropagation();
-                // CHANGE: Explicitly pass "dest" origin
-                setSelectedFile(
+                // --- NEW: MODIFIER LOGIC FOR DEST ---
+                const modifier = e.shiftKey
+                  ? "shift"
+                  : e.ctrlKey || e.metaKey
+                  ? "ctrl"
+                  : "none";
+
+                selectFile(
                   {
                     name: filename,
                     isDirectory: false,
                     isFile: true,
                     isSymlink: false,
                   },
-                  "dest"
+                  "dest",
+                  modifier,
+                  index
                 );
               }}
               // --- NEW: CONTEXT MENU HANDLER ---

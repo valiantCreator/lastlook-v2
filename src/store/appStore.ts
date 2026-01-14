@@ -15,8 +15,12 @@ interface AppState {
   // MANIFEST STATE (The "Brain" for Sprint 3)
   manifestMap: Map<string, ManifestEntry>;
 
-  selectedFile: DirEntry | null;
+  // --- CHANGED: MULTI-SELECT STATE (Sprint 8) ---
+  selectedFiles: Map<string, DirEntry>; // Replaces single selectedFile
+  lastSelectedIndex: number; // For Shift+Click range logic
   selectedFileOrigin: "source" | "dest" | null;
+  // ----------------------------------------------
+
   checkedFiles: Set<string>;
 
   // CONFLICT STATE
@@ -45,12 +49,21 @@ interface AppState {
   removeVerifyingFile: (filename: string) => void;
   addVerifiedFile: (filename: string) => void;
 
-  // Accepts an optional origin ('source' is default for backward compatibility)
-  // FIX: Added | null to the origin type to prevent TS mismatch
-  setSelectedFile: (
-    file: DirEntry | null,
-    origin?: "source" | "dest" | null
+  // --- NEW: SELECTION ACTIONS (Sprint 8) ---
+  // Replaces setSelectedFile with robust toggle logic
+  selectFile: (
+    file: DirEntry,
+    origin: "source" | "dest",
+    modifier?: "shift" | "ctrl" | "none",
+    index?: number
   ) => void;
+
+  clearSelection: () => void;
+
+  // The "Bridge" Button Action
+  checkSelectedFiles: () => void;
+  // -----------------------------------------
+
   setConflicts: (files: string[]) => void;
 
   // CHECKBOX ACTIONS
@@ -87,8 +100,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   verifiedFiles: new Set(),
   verifyingFiles: new Set(),
   manifestMap: new Map(),
-  selectedFile: null,
+
+  // --- NEW DEFAULTS ---
+  selectedFiles: new Map(),
+  lastSelectedIndex: -1,
   selectedFileOrigin: null,
+  // --------------------
+
   checkedFiles: new Set(),
   conflicts: [],
 
@@ -139,9 +157,76 @@ export const useAppStore = create<AppState>((set, get) => ({
       return { verifiedFiles: newSet };
     }),
 
-  // Sets origin. Defaults to "source" if not specified.
-  setSelectedFile: (file, origin = "source") =>
-    set({ selectedFile: file, selectedFileOrigin: origin }),
+  // --- NEW SELECTION LOGIC (Sprint 8) ---
+  selectFile: (file, origin, modifier = "none", index = -1) =>
+    set((state) => {
+      // 1. If Origin Changed, clear everything first
+      let newSelection = new Map(
+        state.selectedFileOrigin === origin ? state.selectedFiles : []
+      );
+
+      // 2. Handle Modifiers
+      if (modifier === "ctrl") {
+        // Additive Toggle
+        if (newSelection.has(file.name)) {
+          newSelection.delete(file.name);
+        } else {
+          newSelection.set(file.name, file);
+        }
+      } else if (
+        modifier === "shift" &&
+        state.lastSelectedIndex !== -1 &&
+        index !== -1
+      ) {
+        // Range Selection
+        // We need access to the full list to slice it.
+        // Since Destination list might differ, we ideally select based on the VIEW's list.
+        // For now, we assume Source List order for Source interactions.
+
+        if (origin === "source") {
+          const start = Math.min(state.lastSelectedIndex, index);
+          const end = Math.max(state.lastSelectedIndex, index);
+
+          const slice = state.fileList.slice(start, end + 1);
+          slice.forEach((f) => newSelection.set(f.name, f));
+        }
+        // Note: Dest range selection requires tracking DestList state, complicating things.
+        // Fallback: If Dest, act like "none" or implement destList tracking later.
+        else {
+          newSelection.clear();
+          newSelection.set(file.name, file);
+        }
+      } else {
+        // Standard Click (Reset)
+        newSelection.clear();
+        newSelection.set(file.name, file);
+      }
+
+      return {
+        selectedFiles: newSelection,
+        selectedFileOrigin: origin,
+        lastSelectedIndex: index,
+      };
+    }),
+
+  clearSelection: () =>
+    set({
+      selectedFiles: new Map(),
+      selectedFileOrigin: null,
+      lastSelectedIndex: -1,
+    }),
+
+  // The "Bridge" Action: Highlighted -> Checked
+  checkSelectedFiles: () =>
+    set((state) => {
+      if (state.selectedFileOrigin !== "source") return {}; // Only check source files
+
+      const newChecked = new Set(state.checkedFiles);
+      state.selectedFiles.forEach((_, name) => newChecked.add(name));
+
+      return { checkedFiles: newChecked };
+    }),
+  // --------------------------------------
 
   setConflicts: (files) => set({ conflicts: files }),
 
@@ -212,7 +297,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({
         fileList: newFileList,
         checkedFiles: newChecked,
-        selectedFile: null, // Deselect to avoid errors
+        selectedFiles: new Map(), // Deselect to avoid errors
       });
 
       console.log("✅ Delete Successful");
@@ -240,8 +325,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       verifyingFiles: new Set(),
       manifestMap: new Map(),
       checkedFiles: new Set(),
-      selectedFile: null,
+
+      selectedFiles: new Map(), // <--- RESET
       selectedFileOrigin: null,
+
       conflicts: [],
       // Reset Drawer
       batchTotalBytes: 0,
@@ -262,8 +349,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({
       sourcePath: null,
       fileList: [],
-      selectedFile: null,
+
+      selectedFiles: new Map(), // <--- RESET
       selectedFileOrigin: null,
+
       verifiedFiles: new Set(),
       verifyingFiles: new Set(),
       checkedFiles: new Set(),

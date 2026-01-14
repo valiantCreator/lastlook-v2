@@ -1,8 +1,8 @@
 # LastLook v2.0: Architecture & Technical Specs
 
-**Status:** Release Candidate 3 (UX Polish & Bug Fixes - Stable)
+**Status:** Phase 11 (Power User Features)
 **Stack:** Tauri (Rust) + React (TypeScript) + Tailwind CSS + Zustand
-**Date:** January 8, 2026
+**Date:** January 14, 2026
 
 ---
 
@@ -11,7 +11,7 @@
 LastLook v2 uses a **Hybrid Architecture** enhanced with a **Sidecar Pattern**:
 
 1.  **Frontend (The Face):** A React Single Page Application (SPA).
-2.  **Backend (The Muscle):** A Rust binary handling IO, Hashing, and Threading.
+2.  **Backend (The Muscle):** A Rust binary handling IO, Hashing, Threading, and Native OS Integration.
 3.  **Sidecar (The Eyes):** An external **FFmpeg** binary managed by Tauri to generate media thumbnails.
 4.  **State (The Brain):** A Global Zustand Store (`appStore`) acting as the Single Source of Truth.
 
@@ -61,9 +61,10 @@ _The React Frontend logic, split into semantic layers._
   - **Purpose:** The "Layout Frame". It creates the 3-column Flexbox grid (Source / Dest / Inspector) and handles global layout constraints (`h-screen`, `overflow-hidden`).
   - **Logic:**
     - **Drag & Drop Engine:** Uses `tauri://drag-drop` listener with `devicePixelRatio` normalization. Implements "Zone Math" (Source < 50% Width < Dest) to handle High-DPI scaling reliably. Supports "Intelligent Drop" where dropping a file auto-mounts the parent folder and selects the specific file.
+    - **Context Menu Engine:** Manages global state `{x, y, path}` for the custom right-click menu to ensure it renders above all panels (Z-Index 50). Triggers the native Rust `show_in_folder` command.
     - **Startup Cleanup:** Triggers `clearTempCache` on mount to wipe previous session data.
     - **Drawer Reset:** Passes `key={transferStartTime}` to the `JobDrawer` component to force re-render on new jobs (Zombie Drawer Fix).
-  - **Dependencies:** `FileList`, `DestFileList`, `Inspector`, `JobDrawer`, `useFileSystem`, `appStore`
+  - **Dependencies:** `FileList`, `DestFileList`, `Inspector`, `JobDrawer`, `ContextMenu`, `useFileSystem`, `appStore`
 - **`App.css`**
   - **Purpose:** Global styles and animation definitions.
   - **Key Rules:**
@@ -80,6 +81,7 @@ _Pure UI elements (Presentation Layer)._
   - **Logic:**
     - **Virtualization/Refs:** Uses refs to manage scrolling behavior.
     - **Click-to-Deselect:** Wraps the list in a click handler that clears the selection if the user clicks the "empty space" background.
+    - **Context Menu:** Captures right-click events (`onContextMenu`), constructs the full file path, and bubbles it up to `App.tsx` for handling.
     - **Context:** Explicitly passes `origin="source"` to child rows to context-switch the Inspector logic.
   - **Visual Logic:**
     - **Standard:** Green Dot (Synced to Dest), Grey Dot (Not Synced).
@@ -90,6 +92,7 @@ _Pure UI elements (Presentation Layer)._
   - **Purpose:** Renders the destination file list with comparison logic.
   - **Logic:**
     - **Comparison:** Iterates through `destFiles` (Set) and compares against the Source list to determine file status (Synced vs Orphan).
+    - **Parity:** Supports the same **Context Menu** (Right-Click -> Reveal) as the Source list.
     - **Filters:** Implements a local state toggle to "Hide Orphans" (files present in Dest but missing in Source).
     - **Visuals:** Renders "Green Dots" for synced files and "Red/Grey" indicators for orphans.
     - **Visual Logic:** Context-Aware Shields.
@@ -102,15 +105,21 @@ _Pure UI elements (Presentation Layer)._
   - **Logic:**
     - **Event Propagation:** Handlers use `e.stopPropagation()` to prevent clicks on checkboxes or the row itself from triggering the parent's "Deselect" background event.
     - **Traffic Light:** conditionally renders status dots (Green/Yellow/Red) based on the `verifiedFiles` and `verifyingFiles` Sets.
+    - **Tooltips:** Implements a "Verified Safe" hover tooltip explaining xxHash-64 integrity. Anchored to the left (`left-0`) to prevent window clipping.
+    - **Context Menu:** Intercepts `onContextMenu` and prevents the default browser menu.
   - **Dependencies:** `DirEntry` (type)
 - **`Inspector.tsx`**
   - **Purpose:** The details panel (Right Sidebar).
   - **Logic:**
+    - **Recursive Stats:** If a **Directory** is selected, triggers `invoke('get_dir_stats')` to count sub-files and folders asynchronously via Rust `walkdir`. Displays a "Calculating..." pulse during the scan.
     - **Hybrid Layout:** If a Batch is selected AND a specific file is clicked, it stacks the "Batch Header" (Macro stats) on top of the "File Preview" (Micro stats).
     - **Asset Protocol:** Transforms local paths into `asset://` URLs for secure image rendering.
     - **Advanced Metadata:** Triggers a Rust command to fetch `ffprobe` data (Codec, FPS) when a video file is mounted.
     - **Layout:** Enforced `w-[400px]` width with text truncation to accommodate long codec strings.
   - **Dependencies:** `appStore`, `@tauri-apps/plugin-fs`, `useMedia`
+- **`ContextMenu.tsx`**
+  - **Purpose:** A custom, OS-styled right-click menu overlay.
+  - **Logic:** Uses an invisible backdrop to detect outside clicks and close the menu. Handles positioning via `x`/`y` props passed from `App.tsx` and triggers `show_in_folder`.
 - **`ConflictModal.tsx`**
   - **Purpose:** A high-z-index overlay blocking interaction when naming collisions occur.
   - **Logic:** Provides 3 resolution paths: `Overwrite`, `Skip`, or `Cancel`. Maps directly to `useTransfer` resolution handlers.
@@ -147,18 +156,20 @@ _Reusable Logic Layer encapsulating side effects._
 - **`useTransfer.ts`**
   - **Purpose:** The core transfer engine controller.
   - **Logic:**
-    - **Pre-flight:** Checks `checkedFiles` against `destFiles` to identify conflicts before starting.
+    - **Pre-flight:** Checks `checkedFiles` against `destFiles` to identify conflicts before starting. Implements "Smart Resume" by comparing Source vs Dest file size and modification date.
     - **Event Loop:** Subscribes to `transfer-progress` (payload: bytes transferred) and `transfer-verifying` (payload: filename).
     - **State Management:** Updates the Store's `completedBytes` for the global progress bar.
     - **Responsiveness:** Manually sets `progress` to 100% immediately upon Rust command success to mask the async gap.
     - **Cleanup:** Triggers `resetJobMetrics()` after a 1-second delay to reset the UI.
-    - **Session Metadata:** At the start of a transfer, fetches the Hostname, OS Type, and App Version to tag the manifest.
+    - **Session Metadata:** At the start of a transfer, fetches the Hostname, OS Type, and App Version to tag the manifest and logs.
     - **Hash Capture:** Receiving the calculated `xxHash` string from the Rust backend's `copy_file` command upon success.
     - **Manifest Integration:** Calls `updateManifest()` immediately after a successful transfer to write the file's data and hash to the destination's JSON receipt.
+    - **Session Accumulator:** Tracks verified files in a `sessionManifest` array during the transfer loop.
+    - **Log Generation:** Upon batch completion, calls `generateLogContent` and writes a human-readable `.txt` receipt to the destination folder using `writeTextFile`.
     - **Reactive Logic:**
       - Immediately after `updateManifest` writes to disk, the hook calls `store.upsertManifestEntry()`.
       - **Purpose:** Ensures the UI (Shield Icons, Delete Buttons) reflects the new verification status instantly, preventing the need for a manual refresh.
-  - **Dependencies:** `appStore`, `@tauri-apps/api/core`
+  - **Dependencies:** `appStore`, `@tauri-apps/api/core`, `logGenerator`
 - **`useMedia.ts`**
   - **Purpose:** Determines how to preview a selected file.
   - **Logic:**
@@ -205,12 +216,13 @@ _TypeScript definitions for data structures._
 
 _Pure functions for formatting._
 
+- **`logGenerator.ts`**
+  - **Purpose:** Formats the human-readable "Transfer Receipt" `.txt` file.
+  - **Format:** "Modern Tree" layout (`└─`) with Session ID, Machine Name, Target Path, and a hierarchical list of files and hashes.
 - **`formatters.ts`**
-
   - **`formatSize(bytes)`**: Converts raw integers to readable strings (e.g., "1024" -> "1.0 KB").
   - **`formatDuration(ms)`**: Converts milliseconds to "MM:SS" or "HH:MM:SS".
   - **`formatDate(date)`**: Standardizes timestamp display.
-
 - **`manifest.ts`**
   - **Purpose:** The "Digital Receipt" engine.
   - **Logic:**
@@ -235,6 +247,7 @@ _The Rust Core environment._
   - **Purpose:** Granular Permission Control Layer (Tauri v2).
   - **Scopes:**
     - `fs:allow-read`: Scoped to `["**"]` (Global Read) to allow Drag & Drop from any external drive or location without prior dialog selection. Explicitly enabled to allow the creation and update of `lastlook_manifest.json`.
+    - `fs:allow-write-text-file`: Explicitly enabled to allow creating Transfer Logs.
     - `shell:allow-execute`: Strictly limits execution to the specific sidecar binaries defined in config.
     - `os:allow-hostname`, `os:allow-os-type`, `os:allow-version`: explicitly enabled to gather machine identity for the manifest audit trail.
     - **`fs:allow-remove`**: Explicitly enabled to allow the deletion of source files. This is the most sensitive permission in the application.
@@ -245,6 +258,8 @@ _The Rust Core environment._
   - **Commands:**
     - **`calculate_hash`**: Uses the `xxhash-rust` crate (xxh3) with a 64MB buffer for maximum throughput.
     - **`copy_file`**: Implements streamed copying with on-the-fly xxHash-64 verification. Includes **"Destructive Cancellation"** safety logic to drop file handles and delete partial data if aborted. Updated to return the final, verified `xxHash-64` string to the frontend upon successful completion, which is then used for the manifest.
+    - **`get_dir_stats(path)`**: Uses the `walkdir` crate in a background thread (`spawn_blocking`) to recursively count files and folders without freezing the UI.
+    - **`show_in_folder(path)`**: Spawns a native OS process (`explorer /select` or `open -R`) to highlight a specific file in the file manager.
     - **Timestamp Preservation:** Explicitly applies `fs::set_modified` to destination files post-transfer to ensure metadata parity for Smart Resume.
     - **`get_video_metadata`**: Spawns `ffprobe` with JSON output args to parse resolution/fps.
     - **`generate_thumbnail`**: Spawns `ffmpeg` to seek to 00:01 and output a single frame to the OS Temp directory.
@@ -254,7 +269,9 @@ _The Rust Core environment._
       - **Safety:** This command is "dumb"—it deletes what it is told. Safety is enforced by the Frontend "Gatekeeper" (Store) which filters inputs before calling this.
 - **`Cargo.toml` / `Cargo.lock`**
   - **Purpose:** Rust dependency management.
-  - **Changes:** Added `tauri-plugin-os` to allow querying the operating system for the machine's hostname and version information.
+  - **Changes:**
+    - Added `tauri-plugin-os` to allow querying the operating system for the machine's hostname and version information.
+    - Added `walkdir = "2"` for recursive directory scanning.
 
 ---
 
