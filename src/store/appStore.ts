@@ -173,6 +173,10 @@ export const useAppStore = create<AppState>((set, get) => ({
         state.selectedFileOrigin === origin ? state.selectedFiles : []
       );
 
+      // Determines if we should update the anchor point (lastSelectedIndex)
+      // Standard/Ctrl click updates it. Shift click PRESERVES it.
+      let nextLastSelectedIndex = index;
+
       console.log(
         `Select: ${modifier} | Index: ${index} | Last: ${state.lastSelectedIndex} | Origin: ${origin}`
       );
@@ -192,6 +196,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       ) {
         // --- SHIFT: RANGE ---
         console.log("-> Entering SHIFT block");
+
+        // CRITICAL FIX: Preserve the original anchor point during Shift-Select
+        nextLastSelectedIndex = state.lastSelectedIndex;
 
         if (origin === "source") {
           const start = Math.min(state.lastSelectedIndex, index);
@@ -218,6 +225,8 @@ export const useAppStore = create<AppState>((set, get) => ({
           // Fallback
           newSelection.clear();
           newSelection.set(file.name, file);
+          // If we fallback, we DO want to reset the anchor
+          nextLastSelectedIndex = index;
         }
       } else {
         // --- STANDARD: RESET ---
@@ -230,7 +239,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       return {
         selectedFiles: newSelection,
         selectedFileOrigin: origin,
-        lastSelectedIndex: index, // Always update last index
+        lastSelectedIndex: nextLastSelectedIndex, // <--- USES CORRECTED ANCHOR LOGIC
       };
     }),
 
