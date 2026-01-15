@@ -142,7 +142,8 @@ export function DestFileList({ files, onContextMenu }: DestFileListProps) {
                   },
                   "dest",
                   modifier,
-                  index
+                  index,
+                  displayFiles // <--- PASSING SORTED LIST FOR RANGE LOGIC
                 );
               }}
               // --- NEW: CONTEXT MENU HANDLER ---

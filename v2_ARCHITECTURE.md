@@ -515,6 +515,6 @@ _Focus: Integrating "The Gold Mine" user feedback and hardening the app for prof
 
 ### 🔮 Phase 11: Power User Features
 
-- [ ] **Shift+Select:** Range selection for the file list.
+- [x] **Shift+Select:** Range selection for the file list.
 - [ ] **"Ask Me For Each":** Granular conflict resolution mode.
 - [ ] **Settings Modal:** Configuration for themes and verification preferences.

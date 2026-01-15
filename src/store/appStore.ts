@@ -16,8 +16,8 @@ interface AppState {
   manifestMap: Map<string, ManifestEntry>;
 
   // --- CHANGED: MULTI-SELECT STATE (Sprint 8) ---
-  selectedFiles: Map<string, DirEntry>; // Replaces single selectedFile
-  lastSelectedIndex: number; // For Shift+Click range logic
+  selectedFiles: Map<string, DirEntry>;
+  lastSelectedIndex: number;
   selectedFileOrigin: "source" | "dest" | null;
   // ----------------------------------------------
 
@@ -43,19 +43,19 @@ interface AppState {
   setDestFiles: (files: Set<string>) => void;
 
   setManifestMap: (map: Map<string, ManifestEntry>) => void;
-  upsertManifestEntry: (entry: ManifestEntry) => void; // <--- NEW ACTION (Reactive Fix)
+  upsertManifestEntry: (entry: ManifestEntry) => void;
 
   addVerifyingFile: (filename: string) => void;
   removeVerifyingFile: (filename: string) => void;
   addVerifiedFile: (filename: string) => void;
 
   // --- NEW: SELECTION ACTIONS (Sprint 8) ---
-  // Replaces setSelectedFile with robust toggle logic
   selectFile: (
     file: DirEntry,
     origin: "source" | "dest",
     modifier?: "shift" | "ctrl" | "none",
-    index?: number
+    index?: number,
+    sortedList?: string[] // <--- NEW: For Dest Shift Logic
   ) => void;
 
   clearSelection: () => void;
@@ -91,6 +91,14 @@ interface AppState {
   // Reset Action for Zombie Drawer fix
   resetJobMetrics: () => void;
 }
+
+// Helper to create basic DirEntry from string (for Dest selection)
+const mockDirEntry = (name: string): DirEntry => ({
+  name,
+  isFile: true,
+  isDirectory: false,
+  isSymlink: false,
+});
 
 export const useAppStore = create<AppState>((set, get) => ({
   sourcePath: null,
@@ -157,17 +165,21 @@ export const useAppStore = create<AppState>((set, get) => ({
       return { verifiedFiles: newSet };
     }),
 
-  // --- NEW SELECTION LOGIC (Sprint 8) ---
-  selectFile: (file, origin, modifier = "none", index = -1) =>
+  // --- NEW SELECTION LOGIC (Sprint 8 FIX) ---
+  selectFile: (file, origin, modifier = "none", index = -1, sortedList) =>
     set((state) => {
-      // 1. If Origin Changed, clear everything first
+      // 1. Check Origin Change
       let newSelection = new Map(
         state.selectedFileOrigin === origin ? state.selectedFiles : []
       );
 
-      // 2. Handle Modifiers
+      console.log(
+        `Select: ${modifier} | Index: ${index} | Last: ${state.lastSelectedIndex} | Origin: ${origin}`
+      );
+
       if (modifier === "ctrl") {
-        // Additive Toggle
+        // --- CTRL: TOGGLE ---
+        console.log("-> Entering CTRL block");
         if (newSelection.has(file.name)) {
           newSelection.delete(file.name);
         } else {
@@ -178,26 +190,39 @@ export const useAppStore = create<AppState>((set, get) => ({
         state.lastSelectedIndex !== -1 &&
         index !== -1
       ) {
-        // Range Selection
-        // We need access to the full list to slice it.
-        // Since Destination list might differ, we ideally select based on the VIEW's list.
-        // For now, we assume Source List order for Source interactions.
+        // --- SHIFT: RANGE ---
+        console.log("-> Entering SHIFT block");
 
         if (origin === "source") {
           const start = Math.min(state.lastSelectedIndex, index);
           const end = Math.max(state.lastSelectedIndex, index);
 
+          // Slice the source list to get the range
           const slice = state.fileList.slice(start, end + 1);
+
+          // Clear previous selection for contiguous range behavior
+          newSelection.clear();
           slice.forEach((f) => newSelection.set(f.name, f));
-        }
-        // Note: Dest range selection requires tracking DestList state, complicating things.
-        // Fallback: If Dest, act like "none" or implement destList tracking later.
-        else {
+        } else if (origin === "dest" && sortedList) {
+          // --- DESTINATION LOGIC (Sprint 8 FIX) ---
+          const start = Math.min(state.lastSelectedIndex, index);
+          const end = Math.max(state.lastSelectedIndex, index);
+
+          console.log(`-> Dest Range: ${start} to ${end}`);
+          const slice = sortedList.slice(start, end + 1);
+
+          newSelection.clear();
+          // Since dest list is just strings, we create mock entries
+          slice.forEach((name) => newSelection.set(name, mockDirEntry(name)));
+        } else {
+          // Fallback
           newSelection.clear();
           newSelection.set(file.name, file);
         }
       } else {
-        // Standard Click (Reset)
+        // --- STANDARD: RESET ---
+        console.log("-> Entering STANDARD block");
+        // Also catches Shift if it's the very first click (no history)
         newSelection.clear();
         newSelection.set(file.name, file);
       }
@@ -205,7 +230,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       return {
         selectedFiles: newSelection,
         selectedFileOrigin: origin,
-        lastSelectedIndex: index,
+        lastSelectedIndex: index, // Always update last index
       };
     }),
 
