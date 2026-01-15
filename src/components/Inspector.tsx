@@ -37,7 +37,6 @@ export function Inspector() {
     destPath,
     checkedFiles,
     clearSelection, // Replaces setSelectedFile(null)
-    checkSelectedFiles, // The "Bridge" Action
   } = useAppStore();
 
   const [metadata, setMetadata] = useState<FileMetadata | null>(null);
@@ -298,16 +297,6 @@ export function Inspector() {
           Total: {isSelectionLoading ? "..." : formatSize(selectionSize)}
         </p>
       </div>
-
-      {/* BRIDGE BUTTON (Only show if Source) */}
-      {selectedFileOrigin === "source" && (
-        <button
-          onClick={checkSelectedFiles}
-          className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded shadow-lg active:scale-95 transition-all text-xs font-bold uppercase tracking-wide"
-        >
-          Check These Files
-        </button>
-      )}
     </div>
   );
 

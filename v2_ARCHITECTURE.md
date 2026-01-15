@@ -290,9 +290,10 @@ interface AppState {
   destFiles: Set<string>; // Fast lookup for Destination presence
   checkedFiles: Set<string>; // Batch Selection (User clicked checkboxes)
 
-  // --- SELECTION CONTEXT ---
-  selectedFile: DirEntry | null;
-  selectedFileOrigin: "source" | "dest" | null; // <--- NEW: Tracks origin for Inspector
+  // --- SELECTION CONTEXT (Multi-Select Architecture) ---
+  selectedFiles: Map<string, DirEntry>; // <--- NEW: Tracks multiple highlighted files
+  lastSelectedIndex: number; // Used for Shift+Click Range calculations
+  selectedFileOrigin: "source" | "dest" | null;
 
   // --- STATUS FLAGS ---
   verifiedFiles: Set<string>; // Files that passed xxHash check
@@ -307,7 +308,18 @@ interface AppState {
 
   // --- ACTIONS ---
   swapPaths: () => void; // Swaps Source/Dest and resets all lists
-  resetJobMetrics: () => void; // <--- NEW: Resets batch stats for clean state
+  resetJobMetrics: () => void;
+
+  // --- SELECTION ACTIONS ---
+  selectFile: (
+    file: DirEntry,
+    origin: "source" | "dest",
+    modifier?: "shift" | "ctrl" | "none",
+    index?: number,
+    sortedList?: string[] // Optional: Required for Destination range logic
+  ) => void;
+
+  checkSelectedFiles: () => void; // Bridges "Highlighted" -> "Checked"
   // ... setters ...
 }
 ```
@@ -513,8 +525,23 @@ _Focus: Integrating "The Gold Mine" user feedback and hardening the app for prof
 - [x] **Context Menus:** Right-click to "Reveal in Explorer/Finder" (Native OS integration).
 - [x] **Verified Tooltips:** Added hover states to explain "xxHash-64" integrity checks.
 
-### 🔮 Phase 11: Power User Features
+### ✅ Phase 11: Power User Features (Current Status)
 
-- [x] **Shift+Select:** Range selection for the file list.
-- [ ] **"Ask Me For Each":** Granular conflict resolution mode.
+_Goal: Improve the "feel" and flexibility of the application, accommodating power-user habits._
+
+#### ✅ Sprint 1: The Range Selector (Completed)
+
+- [x] **Multi-Select Architecture:** Refactored Store to support `Map<string, DirEntry>` for selection.
+- [x] **Shift+Select:** Implemented OS-standard Range Selection (preserving anchor point).
+- [x] **Ctrl+Select:** Implemented Additive/Toggle selection.
+- [x] **Inspector Batching:** Inspector now shows aggregate stats when multiple files are highlighted.
+- [x] **Selection Bridge:** Added "Check These Files" button to convert highlights to checkboxes.
+
+#### 🔮 Sprint 2: Conflict Resolution (Next Up)
+
+- [ ] **"Ask Me For Each":** Granular conflict resolution mode (Modal per file).
+- [ ] **Conflict Queue:** Logic to pause the transfer loop and await user input for specific collisions.
+
+#### 🔮 Sprint 3: The Settings Architecture
+
 - [ ] **Settings Modal:** Configuration for themes and verification preferences.

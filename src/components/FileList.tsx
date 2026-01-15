@@ -24,8 +24,10 @@ export function FileList({
   const {
     // --- CHANGED: USE NEW MULTI-SELECT STATE ---
     selectedFiles,
+    selectedFileOrigin, // <--- Added: Needed to check origin for button
     selectFile,
     clearSelection,
+    checkSelectedFiles, // <--- Added: The Bridge Action
     // -------------------------------------------
     verifiedFiles,
     verifyingFiles,
@@ -45,6 +47,11 @@ export function FileList({
     manifestMap.has(name)
   );
   const canDelete = verifiedSelection.length > 0;
+
+  // --- NEW: LOGIC FOR "SELECT HIGHLIGHTED" BUTTON ---
+  const canSelectHighlighted =
+    selectedFileOrigin === "source" && selectedFiles.size > 0;
+  // --------------------------------------------------
 
   const handleFreeSpace = () => {
     if (!canDelete) return;
@@ -143,14 +150,14 @@ export function FileList({
         ))}
       </div>
 
-      <div className="p-3 bg-zinc-900 border-t border-zinc-800 flex justify-between items-center shrink-0 gap-2">
+      <div className="p-3 bg-zinc-900 border-t border-zinc-800 flex justify-between items-center shrink-0 gap-2 overflow-x-auto scrollbar-none">
         <button
           onClick={(e) => {
             e.stopPropagation();
             checkAllMissing();
           }}
           disabled={!destPath}
-          className={`text-[10px] px-3 py-1.5 rounded border transition-colors cursor-pointer
+          className={`text-[10px] px-3 py-1.5 rounded border transition-colors cursor-pointer whitespace-nowrap
               ${
                 !destPath
                   ? "bg-zinc-800/50 text-zinc-600 border-zinc-800 cursor-not-allowed"
@@ -161,14 +168,29 @@ export function FileList({
           Select All Missing
         </button>
 
-        {/* --- NEW: FREE UP SPACE BUTTON --- */}
+        {/* --- NEW: SELECT HIGHLIGHTED BUTTON (Sprint 8 Refinement) --- */}
+        {/* Render Conditionally, but allow co-existence with Free Space */}
+        {canSelectHighlighted && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              checkSelectedFiles();
+            }}
+            className="text-[10px] px-3 py-1.5 rounded border transition-colors flex-1 text-center font-bold bg-blue-600 border-blue-500 text-white hover:bg-blue-500 shadow-md active:scale-95 whitespace-nowrap"
+          >
+            Select Highlighted ({selectedFiles.size})
+          </button>
+        )}
+
+        {/* --- FREE UP SPACE BUTTON --- */}
+        {/* Render Conditionally to save space, OR allow wrapping */}
         <button
           onClick={(e) => {
             e.stopPropagation();
             handleFreeSpace();
           }}
           disabled={!canDelete}
-          className={`text-[10px] px-3 py-1.5 rounded border transition-colors flex-1 text-center font-medium
+          className={`text-[10px] px-3 py-1.5 rounded border transition-colors flex-1 text-center font-medium whitespace-nowrap
             ${
               canDelete
                 ? "bg-red-900/20 border-red-900/50 text-red-400 hover:bg-red-900/40 hover:text-red-300 cursor-pointer"
@@ -187,9 +209,9 @@ export function FileList({
             e.stopPropagation();
             onClearSource();
           }}
-          className="text-[10px] text-zinc-500 hover:text-zinc-300 underline cursor-pointer"
+          className="text-[10px] text-zinc-500 hover:text-zinc-300 underline cursor-pointer whitespace-nowrap"
         >
-          Change Source
+          Change
         </button>
       </div>
     </div>
