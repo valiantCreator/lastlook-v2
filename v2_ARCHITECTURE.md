@@ -79,10 +79,11 @@ _Pure UI elements (Presentation Layer)._
 - **`FileList.tsx`**
   - **Purpose:** Renders the source file list.
   - **Logic:**
-    - **Virtualization/Refs:** Uses refs to manage scrolling behavior.
-    - **Click-to-Deselect:** Wraps the list in a click handler that clears the selection if the user clicks the "empty space" background.
+    - **Selection Engine:** Handles Shift+Click (Range) and Ctrl+Click (Toggle) by dispatching to the store.
+    - **Adaptive Footer:** Dynamically renders the "Select Highlighted" button alongside "Free Up Space" depending on context.
     - **Context Menu:** Captures right-click events (`onContextMenu`), constructs the full file path, and bubbles it up to `App.tsx` for handling.
-    - **Context:** Explicitly passes `origin="source"` to child rows to context-switch the Inspector logic.
+    - **Virtualization:** Uses refs to manage scrolling behavior.
+    - **Safety:** Conditionally enables the "Free Up Space" button only if selected files are verified in the Manifest.
   - **Visual Logic:**
     - **Standard:** Green Dot (Synced to Dest), Grey Dot (Not Synced).
     - **Verified Upgrade:** If a file exists in `destFiles` AND `manifestMap`, the dot is replaced by a **Green Shield**.
@@ -92,12 +93,12 @@ _Pure UI elements (Presentation Layer)._
   - **Purpose:** Renders the destination file list with comparison logic.
   - **Logic:**
     - **Comparison:** Iterates through `destFiles` (Set) and compares against the Source list to determine file status (Synced vs Orphan).
-    - **Parity:** Supports the same **Context Menu** (Right-Click -> Reveal) as the Source list.
+    - **Parity:** Supports the same **Context Menu** (Right-Click -> Reveal) and Multi-Select interactions as the Source list.
+    - **Range Logic:** Passes the sorted `displayFiles` list to the store to enable accurate Shift+Click ranges on the destination.
     - **Filters:** Implements a local state toggle to "Hide Orphans" (files present in Dest but missing in Source).
-    - **Visuals:** Renders "Green Dots" for synced files and "Red/Grey" indicators for orphans.
     - **Visual Logic:** Context-Aware Shields.
-    - **Green Shield:** File is Verified in Manifest + Exists in current Source (Active Match).
-    - **Red/Grey Dot:** File is in Destination but NOT in current Source (Orphan).
+      - **Green Shield:** File is Verified in Manifest + Exists in current Source (Active Match).
+      - **Red/Grey Dot:** File is in Destination but NOT in current Source (Orphan).
   - **UX Goal:** Prevents false positives. A "Green Shield" specifically implies an active, successful link between the currently connected drives.
   - **Dependencies:** `appStore`
 - **`FileRow.tsx`**
@@ -107,10 +108,12 @@ _Pure UI elements (Presentation Layer)._
     - **Traffic Light:** conditionally renders status dots (Green/Yellow/Red) based on the `verifiedFiles` and `verifyingFiles` Sets.
     - **Tooltips:** Implements a "Verified Safe" hover tooltip explaining xxHash-64 integrity. Anchored to the left (`left-0`) to prevent window clipping.
     - **Context Menu:** Intercepts `onContextMenu` and prevents the default browser menu.
+    - **Traffic Light:** conditionally renders status dots (Green/Yellow/Red) based on the `verifiedFiles` and `verifyingFiles` Sets.
   - **Dependencies:** `DirEntry` (type)
 - **`Inspector.tsx`**
   - **Purpose:** The details panel (Right Sidebar).
   - **Logic:**
+    - **Batch Awareness:** Automatically switches between "Single File Details" and "Multi-Select Summary" based on selection count.
     - **Recursive Stats:** If a **Directory** is selected, triggers `invoke('get_dir_stats')` to count sub-files and folders asynchronously via Rust `walkdir`. Displays a "Calculating..." pulse during the scan.
     - **Hybrid Layout:** If a Batch is selected AND a specific file is clicked, it stacks the "Batch Header" (Macro stats) on top of the "File Preview" (Micro stats).
     - **Asset Protocol:** Transforms local paths into `asset://` URLs for secure image rendering.
@@ -291,8 +294,8 @@ interface AppState {
   checkedFiles: Set<string>; // Batch Selection (User clicked checkboxes)
 
   // --- SELECTION CONTEXT (Multi-Select Architecture) ---
-  selectedFiles: Map<string, DirEntry>; // <--- NEW: Tracks multiple highlighted files
-  lastSelectedIndex: number; // Used for Shift+Click Range calculations
+  selectedFiles: Map<string, DirEntry>; // Tracks multiple highlighted files
+  lastSelectedIndex: number; // Anchor point for Shift+Click Range calculations
   selectedFileOrigin: "source" | "dest" | null;
 
   // --- STATUS FLAGS ---
@@ -316,9 +319,10 @@ interface AppState {
     origin: "source" | "dest",
     modifier?: "shift" | "ctrl" | "none",
     index?: number,
-    sortedList?: string[] // Optional: Required for Destination range logic
+    sortedList?: string[] // Required for Destination range logic (visual sort order)
   ) => void;
 
+  clearSelection: () => void;
   checkSelectedFiles: () => void; // Bridges "Highlighted" -> "Checked"
   // ... setters ...
 }
@@ -532,10 +536,10 @@ _Goal: Improve the "feel" and flexibility of the application, accommodating powe
 #### ✅ Sprint 1: The Range Selector (Completed)
 
 - [x] **Multi-Select Architecture:** Refactored Store to support `Map<string, DirEntry>` for selection.
-- [x] **Shift+Select:** Implemented OS-standard Range Selection (preserving anchor point).
+- [x] **Shift+Select:** Implemented OS-standard Range Selection (preserving anchor point) for both Source and Destination.
 - [x] **Ctrl+Select:** Implemented Additive/Toggle selection.
 - [x] **Inspector Batching:** Inspector now shows aggregate stats when multiple files are highlighted.
-- [x] **Selection Bridge:** Added "Check These Files" button to convert highlights to checkboxes.
+- [x] **Selection Bridge:** Added "Select Highlighted" button to the Source Footer to convert highlights to checkboxes.
 
 #### 🔮 Sprint 2: Conflict Resolution (Next Up)
 

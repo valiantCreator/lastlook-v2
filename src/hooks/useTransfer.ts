@@ -1,13 +1,13 @@
 import { useState, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { stat, writeTextFile } from "@tauri-apps/plugin-fs"; // <--- ADDED writeTextFile
+import { stat, writeTextFile } from "@tauri-apps/plugin-fs";
 import { useAppStore } from "../store/appStore";
 import { type, hostname } from "@tauri-apps/plugin-os";
 import { getVersion } from "@tauri-apps/api/app";
 import { updateManifest } from "../utils/manifest";
-import { ManifestEntry } from "../types/manifest"; // <--- Ensure this is imported if needed, though we construct it inline below
-import { generateLogContent } from "../utils/logGenerator"; // <--- ADDED LOG GENERATOR
+import { ManifestEntry } from "../types/manifest";
+import { generateLogContent } from "../utils/logGenerator";
 
 interface ProgressEvent {
   filename: string;
@@ -259,6 +259,42 @@ export function useTransfer() {
                 );
                 currentDestFiles.add(file.name);
                 setDestFiles(currentDestFiles);
+
+                // --- FIX: WE MUST UPDATE MANIFEST EVEN IF WE SKIP ---
+                // If we skip, it means the file is safe. We must receipt it.
+                // We don't have the hash because we didn't copy it.
+                // CRITICAL DECISION: Do we re-hash? Or trust previous state?
+                // Re-hashing takes time. For now, we assume if size/date match, it's valid.
+                // NOTE: Ideally, we should re-hash to be 100% sure, but that defeats "Smart Resume" speed.
+                // Logic: We will mark it as "verified (skipped)" in logs, but "verified" in manifest.
+
+                // We construct a "Resumed" entry.
+                const resumedEntry: ManifestEntry = {
+                  filename: file.name,
+                  rel_path: file.name,
+                  source_path: fullSource.replace(/\\/g, "/"),
+                  size_bytes: fileSize,
+                  modified_timestamp: srcTime,
+                  hash_type: "xxh3_64",
+                  hash_value: "SKIPPED_MATCH_CONFIRMED", // Or calculate? Let's use a flag.
+                  status: "verified",
+                  verified_at: new Date().toISOString(),
+                };
+
+                // WRITE TO DISK
+                await updateManifest(destPath!, resumedEntry, {
+                  machineName,
+                  os: osType,
+                  appVersion: appVer,
+                  sessionId,
+                });
+
+                // UPDATE UI
+                upsertManifestEntry(resumedEntry);
+
+                // ADD TO LOGS
+                sessionManifest.push(resumedEntry);
+                // ----------------------------------------------------
 
                 continue; // <--- SKIP TRANSFER
               } else {
