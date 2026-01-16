@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAppStore } from "../store/appStore";
 import { exists } from "@tauri-apps/plugin-fs";
-import { join } from "@tauri-apps/api/path";
+// REMOVED: import { join } from "@tauri-apps/api/path";
 
 // --- INLINE ICONS ---
 function XMarkIcon({ className }: { className?: string }) {
@@ -78,6 +78,10 @@ export function DeleteModal() {
   const [isCheckingGlobal, setIsCheckingGlobal] = useState(false);
   const [hasRunCheck, setHasRunCheck] = useState(false);
 
+  // --- NEW: DANGER OVERLAY STATE ---
+  const [showDangerConfirm, setShowDangerConfirm] = useState(false);
+  // -------------------------------
+
   // Reset state whenever the modal opens with new files
   useEffect(() => {
     if (isDeleteModalOpen) {
@@ -86,6 +90,7 @@ export function DeleteModal() {
       setCheckingStatus(initialMap);
       setHasRunCheck(false);
       setIsCheckingGlobal(false);
+      setShowDangerConfirm(false); // Reset danger state
     }
   }, [isDeleteModalOpen, filesToDelete]);
 
@@ -103,10 +108,17 @@ export function DeleteModal() {
     filesToDelete.forEach((f) => newStatusMap.set(f, "checking"));
     setCheckingStatus(new Map(newStatusMap));
 
+    // --- FIX: Manual Path Construction (Matches useTransfer.ts) ---
+    const separator =
+      destPath.endsWith("\\") || destPath.endsWith("/") ? "" : "\\";
+    // -------------------------------------------------------------
+
     for (const filename of filesToDelete) {
       try {
-        // Use cross-platform path join
-        const fullDestPath = await join(destPath, filename);
+        // --- FIX: Use simple string concat instead of async join ---
+        const fullDestPath = `${destPath}${separator}${filename}`;
+        console.log("🔍 Checking Backup Path:", fullDestPath); // DEBUG LOG
+
         // The actual physical check on disk
         const doesExist = await exists(fullDestPath);
 
@@ -126,32 +138,86 @@ export function DeleteModal() {
 
   // --- THE EXECUTION LOGIC ---
   async function handleConfirmDelete() {
-    // Filter list to only those that passed the physical check
-    const verifiedSafe = filesToDelete.filter(
-      (f) => checkingStatus.get(f) === "exists"
-    );
+    // UPDATED: If skipping check, use full list. If checked, filter safe ones.
+    const filesToProcess = hasRunCheck
+      ? filesToDelete.filter((f) => checkingStatus.get(f) === "exists")
+      : filesToDelete;
 
-    if (verifiedSafe.length > 0) {
-      await deleteSourceFiles(verifiedSafe);
+    if (filesToProcess.length > 0) {
+      await deleteSourceFiles(filesToProcess);
     }
     closeDeleteModal();
   }
+
+  // --- NEW: INTERCEPT BUTTON CLICK ---
+  const handleInitialClick = () => {
+    // 1. If check was run AND files are safe -> Delete normally
+    if (hasRunCheck) {
+      handleConfirmDelete();
+    } else {
+      // 2. If check NOT run -> Show Danger Warning
+      setShowDangerConfirm(true);
+    }
+  };
+  // ---------------------------------
 
   // Calculate how many are safe to delete after the check
   const filesSafeToDeleteCount = filesToDelete.filter(
     (f) => checkingStatus.get(f) === "exists"
   ).length;
 
-  const canDelete =
-    hasRunCheck && !isCheckingGlobal && filesSafeToDeleteCount > 0;
-
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
       {/* Modal Container - Red Border for Danger Zone */}
       <div
-        className="bg-zinc-900 border-2 border-red-900/50 rounded-xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200 overflow-hidden"
+        className="bg-zinc-900 border-2 border-red-900/50 rounded-xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200 overflow-hidden relative" // Added relative for overlay
         onClick={(e) => e.stopPropagation()}
       >
+        {/* --- NEW: DANGER OVERLAY (Only visible when forcing delete) --- */}
+        {showDangerConfirm && (
+          <div className="absolute inset-0 bg-zinc-950/95 z-50 flex flex-col items-center justify-center p-8 text-center animate-in fade-in duration-200">
+            <div className="w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center mb-4">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={2}
+                stroke="currentColor"
+                className="w-8 h-8 text-red-500"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
+                />
+              </svg>
+            </div>
+            <h3 className="text-2xl font-bold text-red-500 mb-2">
+              Wait! Are you absolutely sure?
+            </h3>
+            <p className="text-zinc-400 max-w-md mb-8">
+              You haven't run the safety check. If your backup drive is
+              corrupted or disconnected, these files will be{" "}
+              <strong className="text-red-400">lost forever</strong>.
+            </p>
+            <div className="flex gap-4 w-full max-w-sm">
+              <button
+                onClick={() => setShowDangerConfirm(false)}
+                className="flex-1 py-3 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-medium transition-colors"
+              >
+                Go Back
+              </button>
+              <button
+                onClick={handleConfirmDelete}
+                className="flex-1 py-3 rounded bg-red-600 hover:bg-red-500 text-white font-bold transition-colors shadow-lg shadow-red-900/20"
+              >
+                Yes, Delete It
+              </button>
+            </div>
+          </div>
+        )}
+        {/* ------------------------------------------------------------- */}
+
         {/* Header */}
         <div className="p-4 border-b border-red-900/30 flex justify-between items-center bg-red-950/20">
           <div className="flex items-center gap-3">
@@ -255,19 +321,16 @@ export function DeleteModal() {
             >
               Cancel
             </button>
+            {/* UPDATED: Button is always enabled if list is non-empty */}
             <button
-              onClick={handleConfirmDelete}
-              disabled={!canDelete}
+              onClick={handleInitialClick}
+              disabled={false} // Always allowed, but intercepted
               className={`px-4 py-2 rounded-md text-sm font-medium border transition-all shadow-lg flex items-center gap-2
-                ${
-                  canDelete
-                    ? "bg-red-600 hover:bg-red-500 text-white border-red-500 active:scale-95 shadow-red-900/30"
-                    : "bg-zinc-800 text-zinc-600 border-zinc-800 cursor-not-allowed opacity-70"
-                }
+                bg-red-600 hover:bg-red-500 text-white border-red-500 active:scale-95 shadow-red-900/30
               `}
             >
               <TrashIcon className="w-4 h-4" />
-              {canDelete
+              {hasRunCheck
                 ? `Delete ${filesSafeToDeleteCount} Forever`
                 : "Delete Forever"}
             </button>
