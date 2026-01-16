@@ -1,7 +1,12 @@
 import { useState, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { stat, writeTextFile } from "@tauri-apps/plugin-fs";
+import {
+  stat,
+  writeTextFile,
+  readTextFile,
+  exists,
+} from "@tauri-apps/plugin-fs"; // <--- ADDED readTextFile, exists
 import { useAppStore } from "../store/appStore";
 import { type, hostname } from "@tauri-apps/plugin-os";
 import { getVersion } from "@tauri-apps/api/app";
@@ -266,8 +271,7 @@ export function useTransfer() {
                 setDestFiles(currentDestFiles);
 
                 // --- MANIFEST UPDATE ON SKIP ---
-                // If skipped (Smart Resume), we assume safety based on Size/Date match.
-                // We update the receipt to ensure the file is tracked, flagging it as SKIPPED_MATCH.
+                // We construct a "Resumed" entry.
                 const resumedEntry: ManifestEntry = {
                   filename: file.name,
                   rel_path: file.name,
@@ -390,7 +394,7 @@ export function useTransfer() {
       unlistenVerifying();
       setIsTransferring(false);
 
-      // --- GENERATE TRANSFER LOG (Sprint 6) ---
+      // --- GENERATE TRANSFER LOG (Sprint 9: DAILY APPEND) ---
       if (sessionManifest.length > 0 && destPath) {
         try {
           const logContent = generateLogContent(
@@ -399,27 +403,32 @@ export function useTransfer() {
               os: osType,
               appVersion: appVer,
               sessionId,
-              destinationPath: destPath, // <--- ADDED: PASS DEST PATH TO LOG
+              destinationPath: destPath,
               startTime,
               endTime: Date.now(),
             },
             sessionManifest
           );
 
-          // Construct Filename: LastLook_Log_YYYY-MM-DD_HH-mm-ss.txt
+          // Construct Filename: LastLook_Log_YYYY-MM-DD.txt
           const now = new Date();
-          const timestamp = now
-            .toISOString()
-            .replace(/T/, "_")
-            .replace(/\..+/, "")
-            .replace(/:/g, "-");
-          const logName = `LastLook_Log_${timestamp}.txt`;
+          const dateStr = now.toISOString().split("T")[0]; // YYYY-MM-DD
+          const logName = `LastLook_Log_${dateStr}.txt`;
 
-          const destSep = destPath.endsWith("\\") ? "" : "\\";
+          const destSep =
+            destPath.endsWith("\\") || destPath.endsWith("/") ? "" : "\\";
           const logPath = `${destPath}${destSep}${logName}`;
 
-          await writeTextFile(logPath, logContent);
-          console.log("📝 Transfer Log Generated:", logPath);
+          // --- APPEND LOGIC ---
+          let finalContent = logContent;
+          if (await exists(logPath)) {
+            console.log("📝 Log exists. Appending...");
+            const existingContent = await readTextFile(logPath);
+            finalContent = existingContent + "\n\n" + logContent;
+          }
+
+          await writeTextFile(logPath, finalContent);
+          console.log("📝 Transfer Log Updated:", logPath);
         } catch (logErr) {
           console.error("Failed to write transfer log:", logErr);
         }
