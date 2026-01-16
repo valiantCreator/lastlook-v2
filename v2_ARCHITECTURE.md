@@ -251,6 +251,7 @@ _The Rust Core environment._
   - **Scopes:**
     - `fs:allow-read`: Scoped to `["**"]` (Global Read) to allow Drag & Drop from any external drive or location without prior dialog selection. Explicitly enabled to allow the creation and update of `lastlook_manifest.json`.
     - `fs:allow-write-text-file`: Explicitly enabled to allow creating Transfer Logs.
+    - `fs:allow-exists`: Explicitly enabled to allow the frontend to check for the existence of manifest files before reading them.
     - `shell:allow-execute`: Strictly limits execution to the specific sidecar binaries defined in config.
     - `os:allow-hostname`, `os:allow-os-type`, `os:allow-version`: explicitly enabled to gather machine identity for the manifest audit trail.
     - **`fs:allow-remove`**: Explicitly enabled to allow the deletion of source files. This is the most sensitive permission in the application.

@@ -250,6 +250,11 @@ export function useTransfer() {
                 console.log(
                   `⏭️ Smart Resume: Skipping ${file.name} (Identical)`
                 );
+
+                // --- UX FIX: TELL USER WE ARE SKIPPING ---
+                setCurrentFile(`Skipping ${file.name} (Identical)`);
+                // -----------------------------------------
+
                 addVerifiedFile(file.name); // Mark Green
                 addCompletedBytes(fileSize); // Advance Bar
 
@@ -260,15 +265,9 @@ export function useTransfer() {
                 currentDestFiles.add(file.name);
                 setDestFiles(currentDestFiles);
 
-                // --- FIX: WE MUST UPDATE MANIFEST EVEN IF WE SKIP ---
-                // If we skip, it means the file is safe. We must receipt it.
-                // We don't have the hash because we didn't copy it.
-                // CRITICAL DECISION: Do we re-hash? Or trust previous state?
-                // Re-hashing takes time. For now, we assume if size/date match, it's valid.
-                // NOTE: Ideally, we should re-hash to be 100% sure, but that defeats "Smart Resume" speed.
-                // Logic: We will mark it as "verified (skipped)" in logs, but "verified" in manifest.
-
-                // We construct a "Resumed" entry.
+                // --- MANIFEST UPDATE ON SKIP ---
+                // If skipped (Smart Resume), we assume safety based on Size/Date match.
+                // We update the receipt to ensure the file is tracked, flagging it as SKIPPED_MATCH.
                 const resumedEntry: ManifestEntry = {
                   filename: file.name,
                   rel_path: file.name,
@@ -276,7 +275,7 @@ export function useTransfer() {
                   size_bytes: fileSize,
                   modified_timestamp: srcTime,
                   hash_type: "xxh3_64",
-                  hash_value: "SKIPPED_MATCH_CONFIRMED", // Or calculate? Let's use a flag.
+                  hash_value: "SKIPPED (MATCH)", // <--- CHANGED: Clearer Log Status
                   status: "verified",
                   verified_at: new Date().toISOString(),
                 };
