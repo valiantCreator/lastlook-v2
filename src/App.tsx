@@ -213,43 +213,49 @@ function App() {
         ref={sourcePanelRef}
         className="flex-1 flex flex-col border-r border-zinc-800 min-w-[350px] relative transition-colors hover:bg-zinc-900/10"
       >
-        <div className="h-12 border-b border-zinc-800 flex items-center justify-between px-4 bg-zinc-900/50 shrink-0">
-          <span className="font-bold text-sm tracking-wide text-zinc-100">
-            SOURCE
-          </span>
-          <div className="flex items-center gap-2">
-            {sourcePath && (
-              <>
-                <span
-                  className="text-[10px] font-mono text-zinc-500 truncate max-w-[150px]"
-                  title={sourcePath}
-                >
-                  {sourcePath}
-                </span>
-                {/* SWAP BUTTON */}
-                <button
-                  onClick={swapPaths}
-                  className="p-1 hover:bg-zinc-700 rounded text-zinc-400 hover:text-white transition-colors"
-                  title="Swap Source & Destination"
-                >
-                  <svg
-                    className="w-3.5 h-3.5"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
-                    />
-                  </svg>
-                </button>
-              </>
-            )}
+        {/* --- HEADER SPRINT 11 REFACTOR: 2-ROW LAYOUT --- */}
+        {/* REMOVED: border-b border-zinc-800 (Visual unification with Toolbar) */}
+        <div className="flex flex-col bg-zinc-900/50 shrink-0">
+          {/* ROW 1: Title */}
+          <div className="h-10 flex items-center px-4 justify-between">
+            <span className="font-bold text-sm tracking-wide text-zinc-100">
+              SOURCE
+            </span>
           </div>
+
+          {/* ROW 2: Path + Swap (Only if connected) */}
+          {sourcePath && (
+            <div className="px-3 pb-2 flex items-center gap-2">
+              <div
+                className="flex-1 bg-zinc-950 border border-zinc-800 rounded px-2 py-1.5 text-[10px] font-mono text-zinc-400 truncate select-text cursor-default"
+                title={sourcePath}
+              >
+                {sourcePath}
+              </div>
+              {/* SWAP BUTTON: High Visibility */}
+              <button
+                onClick={swapPaths}
+                className="p-1.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded text-zinc-300 hover:text-white transition-all active:scale-95 shadow-sm"
+                title="Swap Source & Destination"
+              >
+                <svg
+                  className="w-3.5 h-3.5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
+                  />
+                </svg>
+              </button>
+            </div>
+          )}
         </div>
+        {/* ----------------------------------------------- */}
 
         <FileList
           sourcePath={sourcePath}
@@ -270,25 +276,43 @@ function App() {
         ref={destPanelRef}
         className="flex-1 flex flex-col min-w-[350px] bg-zinc-900/10 relative transition-colors hover:bg-zinc-900/20"
       >
-        {/* Header with UNMOUNT BUTTON */}
-        <div className="h-12 border-b border-zinc-800 flex items-center justify-between px-4 bg-zinc-900/50 shrink-0">
-          <span className="font-bold text-sm tracking-wide text-zinc-100">
-            DESTINATION
-          </span>
+        {/* --- HEADER SPRINT 11 REFACTOR: 2-ROW LAYOUT --- */}
+        {/* REMOVED: border-b border-zinc-800 (Visual unification with Destination Toolbar) */}
+        <div className="flex flex-col bg-zinc-900/50 shrink-0">
+          {/* ROW 1: Title + Disconnect */}
+          <div className="h-10 flex items-center justify-between px-4">
+            <span className="font-bold text-sm tracking-wide text-zinc-100">
+              DESTINATION
+            </span>
+            {destPath && (
+              <div className="flex items-center gap-3">
+                <span className="text-[9px] font-bold bg-emerald-500/10 text-emerald-500 px-2 py-0.5 rounded border border-emerald-500/20 uppercase tracking-wider">
+                  Connected
+                </span>
+                {/* DISCONNECT: Ghost Button Style */}
+                <button
+                  onClick={unmountDest}
+                  className="text-[10px] px-2 py-1 rounded border border-zinc-700 text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+                >
+                  Disconnect
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* ROW 2: Path Display */}
           {destPath && (
-            <div className="flex items-center gap-3">
-              <span className="text-[10px] bg-emerald-500/10 text-emerald-500 px-2 py-0.5 rounded border border-emerald-500/20">
-                CONNECTED
-              </span>
-              <button
-                onClick={unmountDest}
-                className="text-[10px] text-zinc-500 hover:text-zinc-300 underline cursor-pointer"
+            <div className="px-3 pb-2">
+              <div
+                className="bg-zinc-950 border border-zinc-800 rounded px-2 py-1.5 text-[10px] font-mono text-emerald-500/80 truncate select-text cursor-default"
+                title={destPath}
               >
-                Unmount
-              </button>
+                {destPath}
+              </div>
             </div>
           )}
         </div>
+        {/* ----------------------------------------------- */}
 
         {/* Content */}
         <div className="flex-1 p-4 flex flex-col min-h-0">
@@ -303,19 +327,6 @@ function App() {
             </div>
           ) : (
             <div className="flex-1 border border-zinc-800 rounded-xl bg-zinc-900/30 relative flex flex-col overflow-hidden">
-              {/* Small Info Header */}
-              <div className="h-8 border-b border-zinc-800/50 bg-zinc-900/50 flex items-center px-3 shrink-0">
-                <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider mr-2">
-                  Target:
-                </span>
-                <span
-                  className="text-[10px] font-mono text-emerald-400 truncate"
-                  title={destPath}
-                >
-                  {destPath}
-                </span>
-              </div>
-
               {/* --- NEW: PASS CONTEXT HANDLER --- */}
               <DestFileList
                 files={destFiles}

@@ -125,12 +125,14 @@ _Pure UI elements (Presentation Layer)._
   - **Logic:** Uses an invisible backdrop to detect outside clicks and close the menu. Handles positioning via `x`/`y` props passed from `App.tsx` and triggers `show_in_folder`.
 - **`ConflictModal.tsx`**
   - **Purpose:** A high-z-index overlay blocking interaction when naming collisions occur.
-  - **Logic:** Provides 3 resolution paths: `Overwrite`, `Skip`, or `Cancel`. Maps directly to `useTransfer` resolution handlers.
+  - **Logic:**
+    - Provides 3 resolution paths: `Overwrite`, `Skip`, or `Cancel`.
+    - **Smart Resume Control:** Includes a checkbox to toggle "Smart Resume" (Skip identical files) vs "Force Overwrite" (Re-copy everything).
 - **`DeleteModal.tsx`** (The "Red Zone")
   - **Purpose:** The final safety barrier before data destruction.
   - **Logic:**
-    - **Safety Check:** Before the delete button enables, the component iterates through the file list and performs a live `fs.exists()` check on the **Destination Drive**.
-    - **Enforcement:** Only files that return `true` (confirmed physically present on backup right now) are allowed to be deleted.
+    - **Safety Check:** Iterates through the file list and performs a live `fs.exists()` check on the **Destination Drive**.
+    - **Force Override:** Allows the user to bypass the safety check (e.g., if drive is offline) but intercepts the click to show a secondary "Danger Confirmation" overlay before execution.
 - **`JobDrawer.tsx`**
   - **Purpose:** The persistent footer controller for active transfers.
   - **Logic:**
@@ -217,7 +219,7 @@ _TypeScript definitions for data structures._
 
 #### Utils (`src/utils/`)
 
-_Pure functions for formatting._
+_Pure functions for formatting and data handling._
 
 - **`logGenerator.ts`**
   - **Purpose:** Formats the human-readable "Transfer Receipt" `.txt` string.
@@ -228,8 +230,13 @@ _Pure functions for formatting._
   - **`formatDate(date)`**: Standardizes timestamp display.
 - **`manifest.ts`**
   - **Purpose:** The "Digital Receipt" engine.
+  - **Architecture:** "Memory-First Singleton" with Write-Through Cache.
   - **Logic:**
+    - **Load:** Reads the JSON from disk _once_ upon mounting and caches it in memory to minimize I/O overhead.
     - **Upsert:** Checks for an existing `lastlook_manifest.json` in the destination. If found, it reads, parses, and appends the new entry. If missing, it creates a new one.
+    - **Update (Upsert):** Modifies the in-memory state instantly (0ms latency). Checks for existing entries to overwrite or appends new ones.
+    - **Flush:** Queues a background disk write using a **Mutex** to prevent file locking collisions (`EPERM`) on Windows during rapid transfers.
+    - **Atomic Safety:** Writes the entire state to disk on every flush to ensure no data is lost during power failures.
     - **Path Normalization:** Converts Windows backslashes (`\`) to forward slashes (`/`) in the `source_path` to ensure the JSON is clean and cross-platform compatible.
     - **Safety:** Performing this operation in the frontend utility layer prevents blocking the main Rust transfer threads.
 
@@ -320,7 +327,7 @@ interface AppState {
     origin: "source" | "dest",
     modifier?: "shift" | "ctrl" | "none",
     index?: number,
-    sortedList?: string[] // Required for Destination range logic (visual sort order)
+    sortedList?: string[], // Required for Destination range logic (visual sort order)
   ) => void;
 
   clearSelection: () => void;
@@ -542,11 +549,23 @@ _Goal: Improve the "feel" and flexibility of the application, accommodating powe
 - [x] **Inspector Batching:** Inspector now shows aggregate stats when multiple files are highlighted.
 - [x] **Selection Bridge:** Added "Select Highlighted" button to the Source Footer to convert highlights to checkboxes.
 
-#### 🔮 Sprint 2: Conflict Resolution (Next Up)
+- [x] **Selection Bridge:** Added "Select Highlighted" button to the Source Footer.
 
-- [ ] **"Ask Me For Each":** Granular conflict resolution mode (Modal per file).
-- [ ] **Conflict Queue:** Logic to pause the transfer loop and await user input for specific collisions.
+#### ✅ Sprint 2: Conflict & Safety Refinement (Completed)
 
-#### 🔮 Sprint 3: The Settings Architecture
+- [x] **Daily Logs:** Transfer logs now append to a daily file (`YYYY-MM-DD.txt`) to reduce file clutter.
+- [x] **Smart Resume Toggle:** Added checkbox to Conflict Modal to allow forcing overwrites.
+- [x] **Force Delete:** Added ability to bypass verification check in Delete Modal with a secondary "Danger" warning.
+- [x] **Data Integrity:** Refactored Manifest Engine to use Memory-First Singleton pattern to prevent file locking.
+
+#### 🚧 Sprint 3: Source Pane & UX Refactor (Active)
+
+- [ ] **Header Overhaul:** Redesign Source/Dest headers to split Title and Path into two rows for full visibility.
+- [ ] **Action Toolbar:** Move selection tools ("Select All", "Select Highlighted") to a dedicated toolbar below the path.
+- [ ] **Workflow Polish:** Rename "Unmount" to "Disconnect". Update "Change Source" to open the dialog immediately instead of clearing the pane.
+- [ ] **Smart Selection UI:** Only show "Select Highlighted" button when >1 file is selected.
+
+#### 🔮 Sprint 4: The Settings Architecture
 
 - [ ] **Settings Modal:** Configuration for themes and verification preferences.
+- [ ] **"Ask Me For Each":** (Moved to Future/V1.0 due to complexity).
