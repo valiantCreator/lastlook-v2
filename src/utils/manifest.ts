@@ -5,7 +5,16 @@ import { ManifestFile, ManifestEntry } from "../types/manifest";
 const MANIFEST_FILENAME = "lastlook_manifest.json";
 const CURRENT_SCHEMA_VERSION = "1.0";
 
-// Helper to get default structure if file is missing
+// --- MEMORY STATE (Single Source of Truth) ---
+// This cache prevents us from re-reading the disk 50 times a second.
+let cachedManifest: ManifestFile | null = null;
+let currentManifestPath: string | null = null;
+
+// --- MUTEX QUEUE ---
+// Serializes disk writes to prevent file locking collisions
+let manifestQueue = Promise.resolve();
+
+// Helper to get default structure
 function createEmptyManifest(
   machineName: string,
   os: string,
@@ -26,10 +35,47 @@ function createEmptyManifest(
 }
 
 /**
- * Updates or creates a manifest file in the destination folder.
- * This is designed to be called after a SUCCESSFUL transfer of a single file.
+ * Loads the manifest from the destination folder into MEMORY.
+ * Called when destination is mounted.
  */
-export async function updateManifest(
+export async function loadManifest(
+  destFolder: string
+): Promise<Map<string, ManifestEntry>> {
+  const map = new Map<string, ManifestEntry>();
+
+  try {
+    const manifestPath = await join(destFolder, MANIFEST_FILENAME);
+    currentManifestPath = manifestPath; // Store path for writers
+
+    const fileExists = await exists(manifestPath);
+
+    if (!fileExists) {
+      cachedManifest = null; // No file yet
+      return map;
+    }
+
+    const content = await readTextFile(manifestPath);
+    cachedManifest = JSON.parse(content);
+
+    // Populate Map for UI
+    cachedManifest?.files.forEach((entry) => {
+      map.set(entry.filename, entry);
+    });
+
+    console.log(`📖 Loaded Manifest: ${map.size} verified files found.`);
+    return map;
+  } catch (err) {
+    console.warn("⚠️ Failed to load manifest (ignoring):", err);
+    cachedManifest = null; // Reset cache on error
+    return map;
+  }
+}
+
+/**
+ * Updates the In-Memory Manifest and queues a Disk Write.
+ * This is non-blocking for the logic, but serialized for the disk.
+ */
+export function updateManifest(
   destFolder: string,
   entry: ManifestEntry,
   meta: {
@@ -39,98 +85,50 @@ export async function updateManifest(
     sessionId: string;
   }
 ): Promise<void> {
-  try {
-    const manifestPath = await join(destFolder, MANIFEST_FILENAME);
-    const fileExists = await exists(manifestPath);
-
-    let manifest: ManifestFile;
-
-    if (fileExists) {
-      // 1. READ EXISTING
-      try {
-        const content = await readTextFile(manifestPath);
-        manifest = JSON.parse(content);
-
-        // Update metadata to show recent activity
-        manifest.last_updated = new Date().toISOString();
-
-        // Optional: Update app version if it changed since last run
-        manifest.app_version = meta.appVersion;
-      } catch (e) {
-        console.error(
-          "⚠️ Corrupt manifest found. Creating backup and starting fresh.",
-          e
-        );
-        // In a real pro app, we might rename the old one to .bak here
-        manifest = createEmptyManifest(
-          meta.machineName,
-          meta.os,
-          meta.appVersion,
-          meta.sessionId
-        );
-      }
-    } else {
-      // 2. CREATE NEW
-      manifest = createEmptyManifest(
-        meta.machineName,
-        meta.os,
-        meta.appVersion,
-        meta.sessionId
-      );
-    }
-
-    // 3. UPSERT ENTRY (Update if exists, Append if new)
-    const existingIndex = manifest.files.findIndex(
-      (f) => f.filename === entry.filename
+  // 1. Update Memory Immediately (0ms Latency)
+  if (!cachedManifest) {
+    cachedManifest = createEmptyManifest(
+      meta.machineName,
+      meta.os,
+      meta.appVersion,
+      meta.sessionId
     );
-
-    if (existingIndex >= 0) {
-      // Overwrite existing entry with new verification data
-      manifest.files[existingIndex] = entry;
-    } else {
-      // Append new entry
-      manifest.files.push(entry);
-    }
-
-    // 4. WRITE TO DISK
-    await writeTextFile(manifestPath, JSON.stringify(manifest, null, 2));
-    // console.log(`📝 Manifest updated for: ${entry.filename}`);
-  } catch (err) {
-    console.error("❌ Failed to update manifest:", err);
-    // We do NOT throw here. A manifest failure should not crash the app logic
-    // or make the user think the transfer failed. It's a "soft" error.
   }
-}
 
-/**
- * Loads the manifest from the destination folder and returns a Map for fast lookup.
- * Returns an empty Map if the file is missing or corrupt.
- */
-export async function loadManifest(
-  destFolder: string
-): Promise<Map<string, ManifestEntry>> {
-  const map = new Map<string, ManifestEntry>();
+  // Update Metadata
+  cachedManifest.last_updated = new Date().toISOString();
+  cachedManifest.app_version = meta.appVersion;
 
-  try {
-    const manifestPath = await join(destFolder, MANIFEST_FILENAME);
-    const fileExists = await exists(manifestPath);
+  // Upsert Entry in Memory
+  const existingIndex = cachedManifest.files.findIndex(
+    (f) => f.filename === entry.filename
+  );
 
-    if (!fileExists) {
-      return map; // Return empty map (no verification data yet)
-    }
-
-    const content = await readTextFile(manifestPath);
-    const manifest: ManifestFile = JSON.parse(content);
-
-    // Populate the Map for O(1) lookup
-    manifest.files.forEach((entry) => {
-      map.set(entry.filename, entry);
-    });
-
-    console.log(`📖 Loaded Manifest: ${map.size} verified files found.`);
-    return map;
-  } catch (err) {
-    console.warn("⚠️ Failed to load manifest (ignoring):", err);
-    return map; // Safe fallback
+  if (existingIndex >= 0) {
+    cachedManifest.files[existingIndex] = entry;
+  } else {
+    cachedManifest.files.push(entry);
   }
+
+  // 2. Queue Disk Write (Serialized)
+  // We use the queue to ensure we don't try to open the file handle twice at once
+  manifestQueue = manifestQueue.then(async () => {
+    try {
+      if (!cachedManifest) return;
+
+      // Ensure path is known
+      const path =
+        currentManifestPath || (await join(destFolder, MANIFEST_FILENAME));
+
+      // Write the ENTIRE memory state to disk.
+      // Even if a previous write failed due to lock, this one contains EVERYTHING.
+      await writeTextFile(path, JSON.stringify(cachedManifest, null, 2));
+    } catch (err) {
+      console.error("❌ Manifest Write Failed (Retrying next cycle):", err);
+      // We do not throw. The data is safe in 'cachedManifest' and will be written
+      // on the next successful cycle.
+    }
+  });
+
+  return manifestQueue;
 }

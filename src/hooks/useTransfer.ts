@@ -6,7 +6,7 @@ import {
   writeTextFile,
   readTextFile,
   exists,
-} from "@tauri-apps/plugin-fs"; // <--- ADDED readTextFile, exists
+} from "@tauri-apps/plugin-fs";
 import { useAppStore } from "../store/appStore";
 import { type, hostname } from "@tauri-apps/plugin-os";
 import { getVersion } from "@tauri-apps/api/app";
@@ -87,23 +87,29 @@ export function useTransfer() {
       return;
     }
 
-    // C. No Conflicts -> Go
-    executeTransfer(false);
+    // C. No Conflicts -> Go (Force=False)
+    executeTransfer(false, false);
   }
 
   // 3. RESOLUTION HANDLERS
-  function resolveOverwrite() {
+  function resolveOverwrite(force: boolean) {
     setConflicts([]);
-    executeTransfer(false); // <--- Matches "Overwrite All" behavior
+    // Skip=False, Force=True/False
+    executeTransfer(false, force);
   }
 
   function resolveSkip() {
     setConflicts([]);
-    executeTransfer(true); // <--- Matches "Skip Existing" behavior
+    // Skip=True, Force=False
+    executeTransfer(true, false);
   }
 
   // 4. THE MAIN LOOP
-  async function executeTransfer(skipExisting: boolean) {
+  // UPDATED SIGNATURE: Added forceOverwrite
+  async function executeTransfer(
+    skipExisting: boolean,
+    forceOverwrite: boolean
+  ) {
     setIsTransferring(true);
     setProgress(0);
     setCurrentFileBytes(0);
@@ -207,115 +213,97 @@ export function useTransfer() {
           console.warn(`Failed to stat source file ${file.name}:`, err);
         }
 
-        // --- SKIP LOGIC (Explicit User Choice from Modal "Skip Existing") ---
-        if (skipExisting && destFiles.has(file.name)) {
-          console.log(`Explicit Skip: ${file.name}`);
-          addCompletedBytes(fileSize);
-          continue;
-        }
-
-        // --- SMART RESUME CHECK (Implicit) ---
-        // Even if user chose "Overwrite" (skipExisting=false), we check if they are identical.
+        // --- CONFLICT LOGIC ---
         if (destFiles.has(file.name)) {
-          // DEBUG LOG: Proving we entered the check
-          console.log(`🔎 Checking Smart Resume for: ${file.name}`);
+          // A. EXPLICIT SKIP
+          if (skipExisting) {
+            console.log(`Explicit Skip: ${file.name}`);
+            addCompletedBytes(fileSize);
+            continue;
+          }
 
-          if (sourceStats) {
-            try {
-              const destStats = await stat(fullDest);
+          // B. SMART RESUME CHECK (Implicit)
+          // Run this ONLY if forceOverwrite is FALSE.
+          if (!forceOverwrite) {
+            console.log(`🔎 Checking Smart Resume for: ${file.name}`);
 
-              const isSameSize = destStats.size === fileSize;
+            if (sourceStats) {
+              try {
+                const destStats = await stat(fullDest);
 
-              // Date Comparison (3-second tolerance for ExFAT/FAT32 rounding)
-              let isSameDate = false;
-              let srcTime = 0;
-              let dstTime = 0;
+                const isSameSize = destStats.size === fileSize;
 
-              if (sourceStats.mtime && destStats.mtime) {
-                srcTime = new Date(sourceStats.mtime).getTime();
-                dstTime = new Date(destStats.mtime).getTime();
-                const diff = Math.abs(srcTime - dstTime);
-                if (diff < 3000) {
-                  isSameDate = true;
+                // Date Comparison (3-second tolerance for ExFAT/FAT32 rounding)
+                let isSameDate = false;
+                let srcTime = 0;
+                let dstTime = 0;
+
+                if (sourceStats.mtime && destStats.mtime) {
+                  srcTime = new Date(sourceStats.mtime).getTime();
+                  dstTime = new Date(destStats.mtime).getTime();
+                  const diff = Math.abs(srcTime - dstTime);
+                  if (diff < 3000) {
+                    isSameDate = true;
+                  }
                 }
+
+                if (isSameSize && isSameDate) {
+                  console.log(
+                    `⏭️ Smart Resume: Skipping ${file.name} (Identical)`
+                  );
+
+                  // --- UX FIX: TELL USER WE ARE SKIPPING ---
+                  setCurrentFile(`Skipping ${file.name} (Identical)`);
+                  // -----------------------------------------
+
+                  addVerifiedFile(file.name);
+                  addCompletedBytes(fileSize);
+
+                  const currentDestFiles = new Set(
+                    useAppStore.getState().destFiles
+                  );
+                  currentDestFiles.add(file.name);
+                  setDestFiles(currentDestFiles);
+
+                  // --- MANIFEST UPDATE ON SKIP ---
+                  const resumedEntry: ManifestEntry = {
+                    filename: file.name,
+                    rel_path: file.name,
+                    source_path: fullSource.replace(/\\/g, "/"),
+                    size_bytes: fileSize,
+                    modified_timestamp: srcTime,
+                    hash_type: "xxh3_64",
+                    hash_value: "SKIPPED (MATCH)",
+                    status: "verified",
+                    verified_at: new Date().toISOString(),
+                  };
+
+                  await updateManifest(destPath!, resumedEntry, {
+                    machineName,
+                    os: osType,
+                    appVersion: appVer,
+                    sessionId,
+                  });
+
+                  upsertManifestEntry(resumedEntry);
+                  sessionManifest.push(resumedEntry);
+                  // ----------------------------------------------------
+
+                  continue; // <--- SKIP TRANSFER
+                }
+              } catch (err) {
+                console.warn(`Smart Check failed (could not stat dest):`, err);
               }
-
-              // LOG THE COMPARISON RESULT
-              console.log(
-                `   > Stats: Size[${isSameSize ? "MATCH" : "DIFF"}] Date[${
-                  isSameDate ? "MATCH" : "DIFF"
-                }]`
-              );
-              if (!isSameSize)
-                console.log(`   > Size: ${fileSize} vs ${destStats.size}`);
-              if (!isSameDate)
-                console.log(`   > Date: ${srcTime} vs ${dstTime}`);
-
-              if (isSameSize && isSameDate) {
-                console.log(
-                  `⏭️ Smart Resume: Skipping ${file.name} (Identical)`
-                );
-
-                // --- UX FIX: TELL USER WE ARE SKIPPING ---
-                setCurrentFile(`Skipping ${file.name} (Identical)`);
-                // -----------------------------------------
-
-                addVerifiedFile(file.name); // Mark Green
-                addCompletedBytes(fileSize); // Advance Bar
-
-                // Ensure destFiles set is synced
-                const currentDestFiles = new Set(
-                  useAppStore.getState().destFiles
-                );
-                currentDestFiles.add(file.name);
-                setDestFiles(currentDestFiles);
-
-                // --- MANIFEST UPDATE ON SKIP ---
-                // We construct a "Resumed" entry.
-                const resumedEntry: ManifestEntry = {
-                  filename: file.name,
-                  rel_path: file.name,
-                  source_path: fullSource.replace(/\\/g, "/"),
-                  size_bytes: fileSize,
-                  modified_timestamp: srcTime,
-                  hash_type: "xxh3_64",
-                  hash_value: "SKIPPED (MATCH)", // <--- CHANGED: Clearer Log Status
-                  status: "verified",
-                  verified_at: new Date().toISOString(),
-                };
-
-                // WRITE TO DISK
-                await updateManifest(destPath!, resumedEntry, {
-                  machineName,
-                  os: osType,
-                  appVersion: appVer,
-                  sessionId,
-                });
-
-                // UPDATE UI
-                upsertManifestEntry(resumedEntry);
-
-                // ADD TO LOGS
-                sessionManifest.push(resumedEntry);
-                // ----------------------------------------------------
-
-                continue; // <--- SKIP TRANSFER
-              } else {
-                console.log(`   > Files differ. Overwriting...`);
-              }
-            } catch (err) {
-              console.warn(
-                `   > Smart Check failed (could not stat dest):`,
-                err
-              );
             }
           } else {
-            console.warn(`   > Smart Check skipped: No Source Stats`);
+            console.log(
+              `💪 Force Overwrite: Skipping Smart Resume check for ${file.name}`
+            );
           }
         }
 
-        // Optimization: Skip if already verified in this session
-        if (verifiedFiles.has(file.name)) {
+        // Optimization: Skip if already verified in this session (unless Forced)
+        if (verifiedFiles.has(file.name) && !forceOverwrite) {
           addCompletedBytes(fileSize);
           continue;
         }
@@ -403,7 +391,7 @@ export function useTransfer() {
               os: osType,
               appVersion: appVer,
               sessionId,
-              destinationPath: destPath,
+              destinationPath: destPath, // <--- ADDED: PASS DEST PATH TO LOG
               startTime,
               endTime: Date.now(),
             },

@@ -1,6 +1,8 @@
+import { useState } from "react";
+
 interface ConflictModalProps {
   conflicts: string[];
-  onOverwrite: () => void;
+  onOverwrite: (force: boolean) => void; // <--- UPDATED SIGNATURE
   onSkip: () => void;
   onCancel: () => void;
 }
@@ -11,6 +13,9 @@ export function ConflictModal({
   onSkip,
   onCancel,
 }: ConflictModalProps) {
+  // Default to True (Safe/Fast behavior)
+  const [useSmartResume, setUseSmartResume] = useState(true);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl w-[400px] max-w-full overflow-hidden flex flex-col">
@@ -55,12 +60,29 @@ export function ConflictModal({
         </div>
 
         {/* Actions */}
-        <div className="p-4 bg-zinc-900 flex flex-col gap-2">
+        <div className="p-4 bg-zinc-900 flex flex-col gap-3">
+          {/* --- SMART RESUME CHECKBOX --- */}
+          <label className="flex items-start gap-2 cursor-pointer group select-none">
+            <input
+              type="checkbox"
+              checked={useSmartResume}
+              onChange={(e) => setUseSmartResume(e.target.checked)}
+              className="mt-0.5 accent-blue-500 cursor-pointer"
+            />
+            <div className="text-xs text-zinc-400 group-hover:text-zinc-300">
+              <span className="font-bold text-zinc-300 block">
+                Smart Resume
+              </span>
+              Skip identical files (Size & Date match) to save time.
+            </div>
+          </label>
+          {/* ----------------------------- */}
+
           <button
-            onClick={onOverwrite}
+            onClick={() => onOverwrite(!useSmartResume)} // Pass force=true if unchecked
             className="w-full py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-bold uppercase rounded transition-colors shadow-lg shadow-red-900/20"
           >
-            Overwrite All
+            {useSmartResume ? "Overwrite (Smart)" : "Force Overwrite All"}
           </button>
 
           <button

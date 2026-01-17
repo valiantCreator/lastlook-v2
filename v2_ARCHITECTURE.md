@@ -166,9 +166,9 @@ _Reusable Logic Layer encapsulating side effects._
     - **Cleanup:** Triggers `resetJobMetrics()` after a 1-second delay to reset the UI.
     - **Session Metadata:** At the start of a transfer, fetches the Hostname, OS Type, and App Version to tag the manifest and logs.
     - **Hash Capture:** Receiving the calculated `xxHash` string from the Rust backend's `copy_file` command upon success.
-    - **Manifest Integration:** Calls `updateManifest()` immediately after a successful transfer to write the file's data and hash to the destination's JSON receipt.
+    - **Manifest Integration:** Calls `updateManifest()` immediately after a successful transfer (or smart skip) to write the file's data and hash to the destination's JSON receipt.
     - **Session Accumulator:** Tracks verified files in a `sessionManifest` array during the transfer loop.
-    - **Log Generation:** Upon batch completion, calls `generateLogContent` and writes a human-readable `.txt` receipt to the destination folder using `writeTextFile`.
+    - **Log Generation:** Upon batch completion, checks for an existing Daily Log (`Log_YYYY-MM-DD.txt`). If found, appends the new session report; otherwise, creates a new one.
     - **Reactive Logic:**
       - Immediately after `updateManifest` writes to disk, the hook calls `store.upsertManifestEntry()`.
       - **Purpose:** Ensures the UI (Shield Icons, Delete Buttons) reflects the new verification status instantly, preventing the need for a manual refresh.
@@ -220,8 +220,8 @@ _TypeScript definitions for data structures._
 _Pure functions for formatting._
 
 - **`logGenerator.ts`**
-  - **Purpose:** Formats the human-readable "Transfer Receipt" `.txt` file.
-  - **Format:** "Modern Tree" layout (`└─`) with Session ID, Machine Name, Target Path, and a hierarchical list of files and hashes.
+  - **Purpose:** Formats the human-readable "Transfer Receipt" `.txt` string.
+  - **Format:** "Modern Tree" layout (`└─`) with Session ID, Machine Name, Target Path, and a hierarchical list of files and hashes. Designed to be appended to daily logs as self-contained blocks.
 - **`formatters.ts`**
   - **`formatSize(bytes)`**: Converts raw integers to readable strings (e.g., "1024" -> "1.0 KB").
   - **`formatDuration(ms)`**: Converts milliseconds to "MM:SS" or "HH:MM:SS".
