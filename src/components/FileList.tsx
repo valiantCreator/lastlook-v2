@@ -103,8 +103,8 @@ export function FileList({
       onClick={() => clearSelection()} // Clear selection on background click
     >
       {/* --- SPRINT 11: ACTION TOOLBAR (Top) --- */}
-      {/* Visual Update: bg-zinc-900/50 to match App Header. border-b is the 'One Border'. */}
-      <div className="px-3 py-2 border-b border-zinc-800 bg-zinc-900/50 flex items-center gap-2 shrink-0">
+      {/* VISUAL REFACTOR: bg-zinc-900 (Solid matches Header). One Border Bottom. */}
+      <div className="px-3 py-2 border-b border-zinc-800 bg-zinc-900 flex items-center gap-2 shrink-0">
         <button
           onClick={(e) => {
             e.stopPropagation();

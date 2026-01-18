@@ -213,9 +213,9 @@ function App() {
         ref={sourcePanelRef}
         className="flex-1 flex flex-col border-r border-zinc-800 min-w-[350px] relative transition-colors hover:bg-zinc-900/10"
       >
-        {/* --- HEADER SPRINT 11 REFACTOR: 2-ROW LAYOUT --- */}
-        {/* REMOVED: border-b border-zinc-800 (Visual unification with Toolbar) */}
-        <div className="flex flex-col bg-zinc-900/50 shrink-0">
+        {/* --- HEADER SPRINT 11 REFACTOR: UNIFIED CONTROL CENTER --- */}
+        {/* STYLE: bg-zinc-900 (Solid) to blend with Toolbar below. No border-b here. */}
+        <div className="flex flex-col bg-zinc-900 shrink-0">
           {/* ROW 1: Title */}
           <div className="h-10 flex items-center px-4 justify-between">
             <span className="font-bold text-sm tracking-wide text-zinc-100">
@@ -223,16 +223,17 @@ function App() {
             </span>
           </div>
 
-          {/* ROW 2: Path + Swap (Only if connected) */}
+          {/* ROW 2: Address Bar + Swap */}
           {sourcePath && (
             <div className="px-3 pb-2 flex items-center gap-2">
+              {/* INPUT STYLE: Shadow Inner to look like a field */}
               <div
-                className="flex-1 bg-zinc-950 border border-zinc-800 rounded px-2 py-1.5 text-[10px] font-mono text-zinc-400 truncate select-text cursor-default"
+                className="flex-1 bg-zinc-950 border border-zinc-800 rounded px-2 py-1.5 text-[10px] font-mono text-zinc-400 truncate select-text cursor-default shadow-inner"
                 title={sourcePath}
               >
                 {sourcePath}
               </div>
-              {/* SWAP BUTTON: High Visibility */}
+              {/* SWAP BUTTON */}
               <button
                 onClick={swapPaths}
                 className="p-1.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded text-zinc-300 hover:text-white transition-all active:scale-95 shadow-sm"
@@ -276,9 +277,9 @@ function App() {
         ref={destPanelRef}
         className="flex-1 flex flex-col min-w-[350px] bg-zinc-900/10 relative transition-colors hover:bg-zinc-900/20"
       >
-        {/* --- HEADER SPRINT 11 REFACTOR: 2-ROW LAYOUT --- */}
-        {/* REMOVED: border-b border-zinc-800 (Visual unification with Destination Toolbar) */}
-        <div className="flex flex-col bg-zinc-900/50 shrink-0">
+        {/* --- HEADER SPRINT 11 REFACTOR: UNIFIED CONTROL CENTER --- */}
+        {/* STYLE: bg-zinc-900 (Solid). No border-b here. Match Source. */}
+        <div className="flex flex-col bg-zinc-900 shrink-0">
           {/* ROW 1: Title + Disconnect */}
           <div className="h-10 flex items-center justify-between px-4">
             <span className="font-bold text-sm tracking-wide text-zinc-100">
@@ -300,11 +301,11 @@ function App() {
             )}
           </div>
 
-          {/* ROW 2: Path Display */}
+          {/* ROW 2: Address Bar */}
           {destPath && (
             <div className="px-3 pb-2">
               <div
-                className="bg-zinc-950 border border-zinc-800 rounded px-2 py-1.5 text-[10px] font-mono text-emerald-500/80 truncate select-text cursor-default"
+                className="bg-zinc-950 border border-zinc-800 rounded px-2 py-1.5 text-[10px] font-mono text-emerald-500/80 truncate select-text cursor-default shadow-inner"
                 title={destPath}
               >
                 {destPath}

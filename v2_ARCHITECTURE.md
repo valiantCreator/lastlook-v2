@@ -558,14 +558,14 @@ _Goal: Improve the "feel" and flexibility of the application, accommodating powe
 - [x] **Force Delete:** Added ability to bypass verification check in Delete Modal with a secondary "Danger" warning.
 - [x] **Data Integrity:** Refactored Manifest Engine to use Memory-First Singleton pattern to prevent file locking.
 
-#### 🚧 Sprint 3: Source Pane & UX Refactor (Active)
+#### ✅ Sprint 3: Source Pane & UX Refactor (Completed)
 
-- [ ] **Header Overhaul:** Redesign Source/Dest headers to split Title and Path into two rows for full visibility.
-- [ ] **Action Toolbar:** Move selection tools ("Select All", "Select Highlighted") to a dedicated toolbar below the path.
-- [ ] **Workflow Polish:** Rename "Unmount" to "Disconnect". Update "Change Source" to open the dialog immediately instead of clearing the pane.
-- [ ] **Smart Selection UI:** Only show "Select Highlighted" button when >1 file is selected.
+- [x] **Unified Headers:** Redesigned Source/Dest headers into cohesive "Command Center" blocks.
+- [x] **Action Toolbar:** Moved selection tools to a dedicated top toolbar; kept drive ops in the footer.
+- [x] **Visual Polish:** Updated Path styling to look like active inputs; enforced list vertical alignment.
+- [x] **Workflow Polish:** Renamed "Unmount" to "Disconnect"; "Change Source" now opens dialog immediately.
 
 #### 🔮 Sprint 4: The Settings Architecture
 
-- [ ] **Settings Modal:** Configuration for themes and verification preferences.
+- [ ] **Settings Modal:** Configuration for themes and verification preferences. Configuration for themes, verification preferences, and default behaviors.
 - [ ] **"Ask Me For Each":** (Moved to Future/V1.0 due to complexity).

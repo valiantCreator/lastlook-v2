@@ -79,9 +79,10 @@ export function DestFileList({ files, onContextMenu }: DestFileListProps) {
       // CHANGE: Clicking the empty background deselects the file
       onClick={() => clearSelection()}
     >
-      {/* FILTER TOOLBAR (Sticky Top) */}
+      {/* SPRINT 11 REFACTOR: DEST TOOLBAR --- */}
+      {/* Visual Update: bg-zinc-900 (Solid). Padding py-2 matches Source. One Border Bottom. */}
       <div
-        className="px-2 py-1.5 border-b border-zinc-800/50 bg-zinc-900/50 flex justify-end shrink-0"
+        className="px-3 py-2 border-b border-zinc-800 bg-zinc-900 flex justify-end shrink-0"
         onClick={(e) => e.stopPropagation()} // Prevent toolbar clicks from deselecting
       >
         <label className="flex items-center gap-2 cursor-pointer group">
@@ -107,6 +108,7 @@ export function DestFileList({ files, onContextMenu }: DestFileListProps) {
           />
         </label>
       </div>
+      {/* ------------------------------------ */}
 
       {/* LIST CONTENT */}
       <div className="flex-1 overflow-y-auto p-2 space-y-1 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent">
@@ -130,8 +132,8 @@ export function DestFileList({ files, onContextMenu }: DestFileListProps) {
                 const modifier = e.shiftKey
                   ? "shift"
                   : e.ctrlKey || e.metaKey
-                  ? "ctrl"
-                  : "none";
+                    ? "ctrl"
+                    : "none";
 
                 selectFile(
                   {
@@ -143,7 +145,7 @@ export function DestFileList({ files, onContextMenu }: DestFileListProps) {
                   "dest",
                   modifier,
                   index,
-                  displayFiles // <--- PASSING SORTED LIST FOR RANGE LOGIC
+                  displayFiles, // <--- PASSING SORTED LIST FOR RANGE LOGIC
                 );
               }}
               // --- NEW: CONTEXT MENU HANDLER ---
@@ -189,16 +191,16 @@ export function DestFileList({ files, onContextMenu }: DestFileListProps) {
                        !sourcePath
                          ? "bg-zinc-600 shadow-zinc-900/50" // No Source = Neutral
                          : isSynced
-                         ? "bg-emerald-500 shadow-emerald-500/50" // Synced = Green
-                         : "bg-red-500 shadow-red-900/50" // Orphan = Red
+                           ? "bg-emerald-500 shadow-emerald-500/50" // Synced = Green
+                           : "bg-red-500 shadow-red-900/50" // Orphan = Red
                      }
                    `}
                   title={
                     !sourcePath
                       ? "No Source"
                       : isSynced
-                      ? "Synced (Not Verified)"
-                      : "Orphan (Dest Only)"
+                        ? "Synced (Not Verified)"
+                        : "Orphan (Dest Only)"
                   }
                 />
               )}
